@@ -551,3 +551,29 @@ details.more summary { cursor: pointer; color: var(--accent); font-size: 13px; f
   .weekstrip::-webkit-scrollbar { display: none; }
   .wd { flex: 0 0 132px; scroll-snap-align: start; }
 }
+
+/* ===================================================== */
+/* Idiomas                                                */
+/* ===================================================== */
+.lang-level { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 20px; align-items: end; margin: 8px 0 22px; }
+.lang-level > div { display: grid; gap: 6px; }
+.lang-level select { width: auto; min-width: 96px; }
+.lang-bar { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; align-self: end; padding-bottom: 6px; }
+.lang-bar i { font: 500 10.5px var(--mono); font-style: normal; text-align: center; color: var(--dim); padding-top: 10px; border-top: 4px solid var(--card-3); border-radius: 2px; }
+.lang-bar i.on { color: var(--text); border-top-color: var(--accent); }
+.lang-bar i.goal { color: var(--violet); border-top-style: dashed; border-top-color: var(--accent-2); }
+.lang-bar i.on.goal { border-top-style: solid; color: var(--green); border-top-color: var(--green); }
+.lang-streak { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; }
+.lang-streak .big { font: 800 22px var(--display); color: var(--text); margin-right: 4px; }
+.streak { display: flex; gap: 4px; flex-wrap: wrap; flex-basis: 100%; }
+.streak span { width: 14px; height: 14px; border-radius: 4px; background: var(--bg-2); border: 1px solid var(--line-2); }
+.streak span.on { background: var(--grad); border-color: transparent; }
+.vocab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; margin-top: 12px; }
+.vw { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; padding: 10px 12px; border-radius: 10px; background: var(--bg-2); border: 1px solid var(--line); }
+.vw b { font-weight: 600; overflow-wrap: anywhere; }
+.vw span { grid-column: 1; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.vw .del { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+@media (max-width: 600px) {
+  .lang-level { grid-template-columns: 1fr 1fr; }
+  .lang-bar { grid-column: 1 / -1; grid-row: 2; }
+}

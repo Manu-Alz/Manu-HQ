@@ -50,12 +50,13 @@ const ICONS = {
   estudio: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5zM4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5",
   proyectos: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
   contenido: "M3 6h13v12H3zM16 10l5-3v10l-5-3",
+  idiomas: "M5 8l6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18h6",
   ideas: "M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z",
 };
 const NAV = [
   { group: null, items: [["inicio", "Inicio"]] },
   { group: "Cuerpo", items: [["rutina", "Rutina / Gym"], ["judo", "Judo"], ["fisico", "Cambio físico"], ["surf", "Surf"]] },
-  { group: "Vida", items: [["uruguay", "Estilo de vida"], ["estudio", "Estudio"]] },
+  { group: "Vida", items: [["uruguay", "Estilo de vida"], ["estudio", "Estudio"], ["idiomas", "Idiomas"]] },
   { group: "Trabajo", items: [["proyectos", "Proyectos"], ["contenido", "Contenido"], ["ideas", "Ideas"]] },
 ];
 
@@ -85,6 +86,7 @@ const DEFAULT_STATE = {
   places: [],
   uyNotes: "",
   notes: {},
+  langs: [],
 };
 
 let S = load();
@@ -96,6 +98,7 @@ function load() {
       s.logs = { ...DEFAULT_STATE.logs, ...s.logs };
       s.waza = s.waza || {};
       s.notes = s.notes || {};
+      s.langs = s.langs || [];
       if (s.uyNotes && !(s.notes.uruguay || []).length) s.notes.uruguay = [{ id: uid(), text: s.uyNotes, date: today() }];
       return s;
     }
@@ -377,6 +380,21 @@ function weekStrip(selDay, clickable, R = ROUTINE) {
 let selDay = new Date().getDay();
 let wazaF = { belt: "todos", group: "todos", status: "todos", q: "" };
 let quoteIdx = Math.floor(Math.random() * JUDO_QUOTES.length);
+/* ---------- Idiomas ---------- */
+const LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2", "Nativo"];
+let selLang = null, vocabQ = "";
+function streakOf(days) {
+  const set = new Set(days); let n = 0; const d = new Date();
+  if (!set.has(today())) d.setDate(d.getDate() - 1);   // la racha sigue si hoy todavía no practicaste
+  while (set.has(iso(d))) { n++; d.setDate(d.getDate() - 1); }
+  return n;
+}
+const linkify = (t) => esc(t).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+function vocabHTML(L, list) {
+  return list.map((v) => `<div class="vw"><b>${esc(v.w)}</b><span>${esc(v.m)}</span><button class="del" data-act="del-vocab" data-id="${L.id}" data-vid="${v.id}">✕</button></div>`).join("")
+    || `<p class="empty">${L.vocab.length ? "Nada coincide con la búsqueda." : "Todavía no agregaste palabras."}</p>`;
+}
+const langById = (id) => S.langs.find((l) => l.id === id);
 
 const VIEWS = {
   inicio() {
@@ -681,6 +699,68 @@ const VIEWS = {
     <div class="bento" style="margin-top:16px">${notesCard("contenido", "Notas", "c-12")}</div>`;
   },
 
+  idiomas() {
+    const L = S.langs.find((l) => l.id === selLang) || S.langs[0];
+    const add = `
+      <form class="inline" data-form="lang">
+        <input name="name" placeholder="Agregar idioma (ej: Inglés, Japonés, Portugués)" required />
+        <button class="btn btn-primary">Agregar</button>
+      </form>`;
+    if (!L) {
+      return `${head("Idiomas", "Los idiomas que estoy aprendiendo.")}
+      <div class="card" style="max-width:640px"><p class="muted" style="margin-top:0">Todavía no agregaste ningún idioma.</p>${add}</div>`;
+    }
+    const streak = streakOf(L.days);
+    const days28 = [...Array(28)].map((_, i) => { const d = new Date(); d.setDate(d.getDate() - (27 - i)); return iso(d); });
+    const doneToday = L.days.includes(today());
+    const q = vocabQ.trim().toLowerCase();
+    const vocab = L.vocab.filter((v) => !q || (v.w + " " + v.m).toLowerCase().includes(q));
+    return `
+    ${head("Idiomas", "Los idiomas que estoy aprendiendo.")}
+    <div class="filters">
+      ${S.langs.map((l) => `<button class="chip ${l.id === L.id ? "on" : ""}" data-act="sel-lang" data-id="${l.id}">${esc(l.name)}<span class="muted small mono">${esc(l.level)}</span></button>`).join("")}
+      <form class="inline" data-form="lang" style="flex:0 1 280px"><input name="name" placeholder="+ Idioma" required style="padding:6px 10px" /></form>
+    </div>
+    <div class="bento">
+      <div class="card hero c-8">
+        <div class="card-head" style="margin-bottom:6px">
+          <span class="label-sm" style="color:var(--accent)">${esc(L.name)}</span>
+          <button class="btn btn-sm btn-ghost" data-act="del-lang" data-id="${L.id}">Quitar idioma</button>
+        </div>
+        <div class="lang-level">
+          <div><span class="label-sm">Nivel</span>
+            <select data-act="lang-level" data-id="${L.id}">${LEVELS.map((x) => `<option ${x === L.level ? "selected" : ""}>${x}</option>`).join("")}</select></div>
+          <div class="lang-bar">${LEVELS.slice(0, 6).map((x, i) => `<i class="${LEVELS.indexOf(L.level) >= i ? "on" : ""} ${L.goal === x ? "goal" : ""}" title="${x}">${x}</i>`).join("")}</div>
+          <div><span class="label-sm">Meta</span>
+            <select data-act="lang-goal" data-id="${L.id}">${LEVELS.map((x) => `<option ${x === L.goal ? "selected" : ""}>${x}</option>`).join("")}</select></div>
+        </div>
+        <div class="lang-streak">
+          <button class="btn ${doneToday ? "" : "btn-primary"}" data-act="lang-today" data-id="${L.id}">${doneToday ? "✓ Practiqué hoy (deshacer)" : "Practiqué hoy"}</button>
+          <span class="mono small muted"><b class="big">${streak}</b> días seguidos · ${L.days.filter((d) => days28.includes(d)).length}/28 días</span>
+          <div class="streak">${days28.map((d) => `<span class="${L.days.includes(d) ? "on" : ""}" title="${fmtDate(d)}"></span>`).join("")}</div>
+        </div>
+      </div>
+      <div class="card c-4 side">
+        <div class="card-head"><h2>Recursos</h2><span class="sub">${L.res.length}</span></div>
+        <form class="inline" data-form="lang-res" data-id="${L.id}"><input name="text" placeholder="App, libro, canal, link…" required /><button class="btn">Agregar</button></form>
+        <ul class="list" style="margin-top:12px">${L.res.map((r) => `<li><span class="grow">${linkify(r.text)}</span><button class="del" data-act="del-lang-res" data-id="${L.id}" data-rid="${r.id}">✕</button></li>`).join("") || `<li class="empty" style="background:none">Sin recursos.</li>`}</ul>
+      </div>
+    </div>
+    <div class="bento">
+      <div class="card c-8">
+        <div class="card-head"><h2>Vocabulario</h2><span class="sub">${L.vocab.length} palabras</span></div>
+        <form class="inline" data-form="vocab" data-id="${L.id}">
+          <input name="w" placeholder="Palabra / frase" required />
+          <input name="m" placeholder="Significado" />
+          <button class="btn btn-primary">Agregar</button>
+        </form>
+        <input id="vocab-q" placeholder="Buscar…" value="${esc(vocabQ)}" style="margin-top:10px" aria-label="Buscar en el vocabulario" />
+        <div class="vocab-grid" id="vocab-list">${vocabHTML(L, vocab)}</div>
+      </div>
+      ${notesCard("idiomas-" + L.id, "Notas de " + esc(L.name), "c-4 side")}
+    </div>`;
+  },
+
   ideas() {
     return `
     ${head("Ideas", "Todo lo que se me ocurre. Se guarda solo, aunque recargues la página.")}
@@ -788,6 +868,9 @@ document.addEventListener("submit", (e) => {
     case "planstart": S.planStart = v.start || null; buildRoutine(); updateSplash(); break;
     case "study": S.study.push({ id: uid(), ...v, done: false }); break;
     case "idea": addIdea(v.text, v.tag); break;
+    case "lang": { const l = { id: uid(), name: v.name.trim(), level: "A1", goal: "B2", days: [], vocab: [], res: [] }; S.langs.push(l); selLang = l.id; break; }
+    case "lang-res": langById(f.dataset.id).res.push({ id: uid(), text: v.text }); break;
+    case "vocab": langById(f.dataset.id).vocab.unshift({ id: uid(), w: v.w, m: v.m }); break;
     case "note": (S.notes[f.dataset.key] = S.notes[f.dataset.key] || []).unshift({ id: uid(), text: v.text, date: today() }); break;
     case "content": S.content.push({ id: uid(), title: v.title, cat: v.cat, stage: 0 }); break;
     case "project": S.projects.push({ id: uid(), status: "Activo", tasks: [], ...v }); break;
@@ -824,6 +907,13 @@ function act(el) {
     case "toggle-ptask": S.projects.find((p) => p.id === pid).tasks.find((t) => t.id === id).done = el.checked; break;
     case "del-ptask": { const p = S.projects.find((p) => p.id === pid); p.tasks = p.tasks.filter((t) => t.id !== id); break; }
     case "sel-block": viewBlock = el.dataset.block; render(); return;
+    case "sel-lang": selLang = id; vocabQ = ""; render(); return;
+    case "del-lang": if (!confirm("¿Quitar este idioma y su vocabulario?")) return; S.langs = drop(S.langs); selLang = null; break;
+    case "lang-level": langById(id).level = el.value; break;
+    case "lang-goal": langById(id).goal = el.value; break;
+    case "lang-today": { const l = langById(id); l.days = l.days.includes(today()) ? l.days.filter((d) => d !== today()) : [...l.days, today()]; break; }
+    case "del-lang-res": { const l = langById(id); l.res = l.res.filter((r) => r.id !== el.dataset.rid); break; }
+    case "del-vocab": { const l = langById(id); l.vocab = l.vocab.filter((x) => x.id !== el.dataset.vid); break; }
     case "del-note": S.notes[key] = (S.notes[key] || []).filter((x) => x.id !== id); break;
     case "next-quote": quoteIdx = (quoteIdx + 1 + Math.floor(Math.random() * (JUDO_QUOTES.length - 1))) % JUDO_QUOTES.length; render(); return;
     case "waza-belt": wazaF.belt = el.dataset.belt; $("#waza-filters").innerHTML = wazaFilters(); refreshWaza(); return;
@@ -848,6 +938,7 @@ document.addEventListener("change", (e) => {
 let uyTimer;
 document.addEventListener("input", (e) => {
   if (e.target.dataset?.wf === "q") { wazaF.q = e.target.value; refreshWaza(); return; }
+  if (e.target.id === "vocab-q") { vocabQ = e.target.value; const L = S.langs.find((l) => l.id === selLang) || S.langs[0]; const q = vocabQ.trim().toLowerCase(); $("#vocab-list").innerHTML = vocabHTML(L, L.vocab.filter((v) => !q || (v.w + " " + v.m).toLowerCase().includes(q))); return; }
   if (e.target.id !== "uy-notes") return;
   S.uyNotes = e.target.value;
   clearTimeout(uyTimer);
