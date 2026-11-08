@@ -8,16 +8,95 @@ const PLAYLIST = "spotify:playlist:1sBTc7WolPCShgS43THVEC";
 const PLAN73 = "https://manu-alz.github.io/Plan-73/";
 const STORE_KEY = "manuhq-v1";
 
-/* ---------- Rutina (de Plan-73) — índice = getDay(): 0 domingo ---------- */
-const ROUTINE = [
-  { name: "Domingo", title: "Descanso + estiramiento largo", tag: "estiramientos", items: ["Estiramiento largo", "Movilidad", "Pesaje semanal"] },
-  { name: "Lunes", title: "A · Fuerza máx. piernas", tag: "gym", items: ["Sentadilla trasera", "Búlgara", "Peso muerto rumano", "Curl nórdico", "Pantorrillas"] },
-  { name: "Martes", title: "B · Fuerza máx. tren superior", tag: "gym", items: ["Dominadas lastradas", "Remo", "Press banca", "Press militar", "Agarre + cuello"] },
-  { name: "Miércoles", title: "Sprints + movilidad", tag: "fisico", items: ["Sprints", "Movilidad"] },
-  { name: "Jueves", title: "C · Potencia judo", tag: "judo", items: ["Hex deadlift", "Step-ups", "Saltos a una pierna", "Power clean", "Giro de cadera", "Uchikomi con banda"] },
-  { name: "Viernes", title: "D · Tirón, agarre y volumen", tag: "gym", items: ["Dominadas en judogi", "Remo pecho apoyado", "Press inclinado", "Fondos", "Landmine press", "Soga + granjero"] },
-  { name: "Sábado", title: "Sprints o randori fuerte", tag: "judo", items: ["Sprints", "o randori fuerte"] },
-];
+/* ---------- Rutina — se sincroniza en vivo con Plan-73 ----------
+   Índice = getDay(): 0 domingo. Esto es solo el respaldo si no hay conexión. */
+const DAY_NAMES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+let ROUTINE = [
+  { letter: "—", title: "Descanso + estiramiento largo", tag: "estiramientos", items: [{ n: "Estiramiento largo", rx: "30–60 min" }] },
+  { letter: "A", title: "Fuerza máxima, piernas", tag: "gym", items: [{ n: "Sentadilla trasera", key: true }, { n: "Peso muerto rumano" }, { n: "Sentadilla búlgara" }, { n: "Curl nórdico" }] },
+  { letter: "B", title: "Fuerza máxima, tren superior", tag: "gym", items: [{ n: "Dominadas con lastre", key: true }, { n: "Press de banca" }, { n: "Remo con barra" }, { n: "Press militar de pie" }] },
+  { letter: "S", title: "Sprints + movilidad", tag: "fisico", items: [{ n: "Sprints de 20 s" }, { n: "Movilidad" }] },
+  { letter: "C", title: "Potencia de judo: cadera y piernas", tag: "judo", items: [{ n: "Peso muerto con barra hexagonal", key: true }, { n: "Uchikomi con banda elástica" }] },
+  { letter: "D", title: "Tirón, agarre y volumen", tag: "gym", items: [{ n: "Dominadas agarrado del judogi", key: true }, { n: "Remo con pecho apoyado" }] },
+  { letter: "S", title: "Sprints (o randori fuerte)", tag: "fisico", items: [{ n: "Sprints de 20 s" }, { n: "o randori fuerte" }] },
+].map((d, i) => ({ ...d, name: DAY_NAMES[i] }));
+
+let PLAN = null;          // { week:[{d,s,t}], blocks:[{id,name,weeks,title,s}] }
+let planStatus = "offline";
+
+/* Semana del plan según la fecha de inicio (si la cargaste en Rutina) */
+function planWeek() {
+  if (!S.planStart) return null;
+  const days = Math.floor((new Date(today() + "T12:00:00") - new Date(S.planStart + "T12:00:00")) / 864e5);
+  return days < 0 ? null : Math.floor(days / 7) + 1;
+}
+/* Bloque actual: por semana del plan → si no, el último que abriste en Plan-73 → si no, Bloque 1 */
+function currentBlock() {
+  if (!PLAN) return null;
+  const find = (id) => PLAN.blocks.find((b) => b.id === id);
+  const w = planWeek();
+  if (w) {
+    if (w <= 4) return { ...find("b1"), deload: w === 4 };
+    if (w <= 10) return find("b2");
+    if (w <= 16) return find("b3");
+    const pos = (w - 17) % 13;            // después de la 16: descarga y se repite desde el bloque 2
+    if (pos === 0) return { ...find("b3"), deload: true };
+    return pos <= 6 ? find("b2") : find("b3");
+  }
+  let id = "b1";
+  try { id = localStorage.getItem("bloque") || "b1"; } catch (e) { /* ignorar */ }
+  return find(id) || PLAN.blocks[0];
+}
+function blockLabel() {
+  const b = currentBlock(); if (!b) return "";
+  const w = planWeek();
+  return `${b.name}${w ? ` · Semana ${w}` : ""}${b.deload ? " · Descarga" : ""}`;
+}
+function buildRoutine() {
+  const b = currentBlock();
+  if (!PLAN || !b || PLAN.week.length !== 7) return;
+  ROUTINE = PLAN.week.map((w, i) => {
+    const day = (i + 1) % 7;               // la semana de Plan-73 arranca el lunes
+    const L = w.s;
+    let items, tag;
+    if (b.s[L]) {
+      items = b.s[L].map((e) => ({ n: e[0], rx: e[1], note: e[2], key: !!e[3] }));
+      tag = L === "C" ? "judo" : "gym";
+    } else if (L === "S") {
+      items = [{ n: "Sprints de 20 s" }, { n: "Movilidad" }]; tag = "fisico";
+    } else {
+      items = [{ n: "Estiramiento largo", rx: "30–60 min" }]; tag = "estiramientos";
+    }
+    return { day, letter: L, title: w.t, tag, items };
+  }).sort((a, b2) => a.day - b2.day).map((d) => ({ ...d, name: DAY_NAMES[d.day] }));
+}
+async function loadPlan73() {
+  try {
+    const cached = JSON.parse(localStorage.getItem("manuhq-plan73") || "null");
+    if (cached) { PLAN = cached; planStatus = "cache"; buildRoutine(); }
+  } catch (e) { /* ignorar */ }
+  try {
+    const html = await fetch(PLAN73, { cache: "no-cache" }).then((r) => r.text());
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const week = [...doc.querySelectorAll(".week .day")].map((el) => ({
+      d: el.querySelector(".d")?.textContent.trim(),
+      s: el.querySelector(".s")?.textContent.trim(),
+      t: el.querySelector(".t")?.textContent.trim(),
+    }));
+    // Los bloques están como JS en mi propia página de Plan-73: tomo esa parte del script y la evalúo.
+    const src = [...doc.scripts].map((s) => s.textContent).find((t) => t.includes("const blocks"));
+    const code = src.slice(0, src.indexOf("const tabs"));
+    const { blocks } = new Function(code + ";return {blocks};")();
+    PLAN = { week, blocks: blocks.map(({ id, name, weeks, title, s }) => ({ id, name, weeks, title, s })) };
+    planStatus = "live";
+    try { localStorage.setItem("manuhq-plan73", JSON.stringify(PLAN)); } catch (e) { /* ignorar */ }
+    buildRoutine();
+  } catch (e) {
+    console.warn("No pude leer Plan-73, uso la versión guardada.", e);
+  }
+  updateSplash();
+  render();
+}
 
 const AREAS = {
   general: "General", gym: "Gym", judo: "Judo", fisico: "Físico", estiramientos: "Estiramientos",
@@ -199,10 +278,17 @@ function weekGrid() {
   const order = [1, 2, 3, 4, 5, 6, 0];
   return `<div class="week">${order.map((i) => {
     const d = ROUTINE[i];
-    return `<div class="d ${i === now ? "now" : ""}"><b>${d.name}</b>${tag(d.tag)}<div style="margin-top:6px">${esc(d.title)}</div>
-      <ul>${d.items.map((it) => `<li>${esc(it)}</li>`).join("")}</ul></div>`;
+    return `<div class="d ${i === now ? "now" : ""}"><b>${d.name}</b>${tag(d.tag)}<div style="margin-top:6px">${sessionName(d)}</div>
+      <ul>${d.items.map((it) => `<li>${itemHTML(it)}</li>`).join("")}</ul></div>`;
   }).join("")}</div>`;
 }
+const sessionName = (d) => `${/^[A-D]$/.test(d.letter) ? `<span class="letter">${d.letter}</span> ` : ""}${esc(d.title)}`;
+const itemHTML = (i) => `<span class="${i.key ? "key" : ""}">${esc(i.n)}</span>${i.rx ? ` <span class="rx">${esc(i.rx)}</span>` : ""}`;
+const syncBadge = () => ({
+  live: `<span class="sync ok">● Sincronizado con Plan-73</span>`,
+  cache: `<span class="sync">● Plan-73 (guardado)</span>`,
+  offline: `<span class="sync off">● Sin conexión a Plan-73</span>`,
+}[planStatus]);
 
 const head = (title, sub, extra = "") => `<div class="page-head"><div><h1>${title}</h1>${sub ? `<p>${sub}</p>` : ""}</div>${extra}</div>`;
 
@@ -226,9 +312,10 @@ const VIEWS = {
     </div>
     <div class="grid g2">
       <div class="card today">
-        <div class="card-head"><span class="muted small">HOY TOCA</span>${tag(d.tag)}</div>
-        <div class="day">${esc(d.title)}</div>
-        <ul class="muted">${d.items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>
+        <div class="card-head"><span class="eyebrow-sm">Hoy toca${blockLabel() ? ` · ${esc(blockLabel())}` : ""}</span>${tag(d.tag)}</div>
+        <div class="day">${sessionName(d)}</div>
+        <ol class="ex">${d.items.map((i) => `<li>${itemHTML(i)}</li>`).join("")}</ol>
+        <div class="small" style="margin-bottom:12px">${syncBadge()}</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn ${doneToday ? "" : "btn-primary"}" data-act="done-today" ${doneToday ? "disabled" : ""}>${doneToday ? "✓ Hecho hoy" : "Marcar como hecho"}</button>
           <a class="btn btn-ghost" href="${PLAN73}" target="_blank" rel="noopener">Abrir Plan-73 ↗</a>
@@ -261,7 +348,19 @@ const VIEWS = {
   rutina() {
     return `
     ${head("Rutina / Gym", "Plan-73: fuerza y potencia para judo −73 kg.", `<a class="btn" href="${PLAN73}" target="_blank" rel="noopener">Ver plan completo ↗</a>`)}
-    <div class="card" style="margin-bottom:16px">${weekGrid()}</div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-head" style="flex-wrap:wrap">
+        <div><h2>${esc(currentBlock()?.title || "Semana tipo")}</h2><span class="small muted">${esc(blockLabel())}${currentBlock()?.weeks ? ` · ${esc(currentBlock().weeks)}` : ""}</span></div>
+        <span class="small">${syncBadge()}</span>
+      </div>
+      <form class="inline" data-form="planstart" style="margin-bottom:16px;max-width:520px;align-items:center">
+        <label class="small muted" style="flex:0 0 auto">Empecé el plan el</label>
+        <input name="start" type="date" value="${esc(S.planStart || "")}" />
+        <button class="btn btn-sm">Guardar</button>
+      </form>
+      ${S.planStart ? "" : `<p class="small muted" style="margin:-8px 0 16px">Cargá la fecha de inicio y el HQ calcula solo en qué semana y bloque estás. Sin fecha, usa el último bloque que abriste en Plan-73.</p>`}
+      ${weekGrid()}
+    </div>
     <div class="grid g2">
       ${logCard("gym", "Registro de sesiones", [
         { k: "date", label: "Fecha", type: "date", req: true },
@@ -522,6 +621,7 @@ document.addEventListener("submit", (e) => {
     case "check": S[f.dataset.key].push({ id: uid(), text: v.text, done: false }); break;
     case "log": S.logs[f.dataset.key].push({ id: uid(), ...v }); break;
     case "weight": S.weights.push({ id: uid(), date: v.date, kg: +v.kg, note: v.note }); break;
+    case "planstart": S.planStart = v.start || null; buildRoutine(); updateSplash(); break;
     case "goals": S.goals = { weight: +v.weight, walking: +v.walking }; break;
     case "stretch": S.stretchRoutine.push(v.text); break;
     case "study": S.study.push({ id: uid(), ...v, done: false }); break;
@@ -548,7 +648,7 @@ function act(el) {
     case "del-check": S[key] = drop(S[key]); break;
     case "del-log": S.logs[key] = drop(S.logs[key]); break;
     case "del-weight": S.weights = drop(S.weights); break;
-    case "done-today": S.logs.gym.push({ id: uid(), date: today(), session: ROUTINE[new Date().getDay()].title, notes: "" }); break;
+    case "done-today": S.logs.gym.push({ id: uid(), date: today(), session: (() => { const d = ROUTINE[new Date().getDay()]; return /^[A-D]$/.test(d.letter) ? `${d.letter} · ${d.title}` : d.title; })(), notes: "" }); break;
     case "del-stretch": S.stretchRoutine.splice(+el.dataset.i, 1); break;
     case "stretch-today": S.stretchDays = S.stretchDays.includes(today()) ? S.stretchDays.filter((d) => d !== today()) : [...S.stretchDays, today()]; break;
     case "toggle-study": byId(S.study).done = el.checked; break;
@@ -635,7 +735,13 @@ $("#enter-btn").addEventListener("click", enter);
 document.addEventListener("keydown", (e) => { if (!entered && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); enter(); } });
 
 $("#splash-date").textContent = new Date().toLocaleDateString("es-UY", { weekday: "long", day: "numeric", month: "long" });
-$("#splash-session").textContent = ROUTINE[new Date().getDay()].title;
+function updateSplash() {
+  const d = ROUTINE[new Date().getDay()];
+  $("#splash-session").innerHTML = sessionName(d);
+  $("#splash-block").textContent = blockLabel();
+}
+updateSplash();
+loadPlan73();
 const tick = () => { $("#splash-clock").textContent = new Date().toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }); };
 tick();
 const clockTimer = setInterval(tick, 1000 * 10);

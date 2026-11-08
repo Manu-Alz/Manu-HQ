@@ -7,7 +7,7 @@
   <meta name="description" content="Mi hub personal: entreno, judo, surf, proyectos, estudio e ideas." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,500..900&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>" />
 </head>
@@ -29,13 +29,16 @@
 
       <div class="splash-today">
         <span class="label">Hoy toca</span>
-        <span id="splash-session"></span>
+        <span class="session" id="splash-session"></span>
+        <span class="block" id="splash-block"></span>
       </div>
 
-      <button id="enter-btn" class="cta">
-        <span class="cta-icon"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></span>
-        <span class="cta-text">Arrancar el día</span>
-      </button>
+      <div class="cta-wrap">
+        <button id="enter-btn" class="cta">
+          <span class="cta-text">Arrancar el día</span>
+          <span class="cta-icon"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></span>
+        </button>
+      </div>
       <p class="hint"><span class="desk"><kbd>Enter</kbd> para empezar</span><span class="touch">Tocá para empezar</span> · con música</p>
     </div>
 
