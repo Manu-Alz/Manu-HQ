@@ -14,12 +14,36 @@
 <body>
   <!-- Pantalla de entrada: el clic permite arrancar la música -->
   <div id="splash">
-    <div class="splash-inner">
-      <div class="splash-logo">MANU<span>HQ</span></div>
-      <p class="splash-sub" id="splash-date"></p>
-      <button id="enter-btn" class="btn btn-primary btn-lg">Entrar ▶</button>
-      <button id="enter-silent" class="btn btn-ghost">Entrar sin música</button>
+    <div class="splash-glow"></div>
+    <div class="splash-top">
+      <span id="splash-clock">--:--</span>
+      <span>Uruguay · 34°S</span>
     </div>
+
+    <div class="splash-inner">
+      <p class="eyebrow" id="splash-date"></p>
+      <h1 class="splash-logo" aria-label="Manu HQ">
+        <span class="l">M</span><span class="l">A</span><span class="l">N</span><span class="l">U</span><span class="l hq">H</span><span class="l hq">Q</span>
+      </h1>
+      <p class="splash-pillars">Judo <i></i> Fuerza <i></i> Surf <i></i> Proyectos <i></i> Vida</p>
+
+      <div class="splash-today">
+        <span class="label">Hoy toca</span>
+        <span id="splash-session"></span>
+      </div>
+
+      <button id="enter-btn" class="cta">
+        <span class="cta-icon"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></span>
+        <span class="cta-text">Arrancar el día</span>
+      </button>
+      <p class="hint"><span class="desk"><kbd>Enter</kbd> para empezar</span><span class="touch">Tocá para empezar</span> · con música</p>
+    </div>
+
+    <svg class="waves" viewBox="0 0 2880 160" preserveAspectRatio="none" aria-hidden="true">
+      <path class="w1" d="M0 80 Q 180 30 360 80 T 720 80 T 1080 80 T 1440 80 T 1800 80 T 2160 80 T 2520 80 T 2880 80 V160 H0Z"/>
+      <path class="w2" d="M0 100 Q 240 60 480 100 T 960 100 T 1440 100 T 1920 100 T 2400 100 T 2880 100 V160 H0Z"/>
+      <path class="w3" d="M0 120 Q 120 100 240 120 T 480 120 T 720 120 T 960 120 T 1200 120 T 1440 120 T 1680 120 T 1920 120 T 2160 120 T 2400 120 T 2640 120 T 2880 120 V160 H0Z"/>
+    </svg>
   </div>
 
   <div class="app">

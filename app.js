@@ -213,7 +213,7 @@ const VIEWS = {
     const doneToday = S.logs.gym.some((l) => l.date === today());
     const lastW = [...S.weights].sort((a, b) => b.date.localeCompare(a.date))[0];
     const hour = new Date().getHours();
-    const hi = hour < 12 ? "Buen día" : hour < 20 ? "Buenas tardes" : "Buenas noches";
+    const hi = hour < 6 ? "Buenas noches" : hour < 12 ? "Buen día" : hour < 20 ? "Buenas tardes" : "Buenas noches";
     const active = S.projects.filter((p) => p.status === "Activo");
     const study = S.study.filter((s) => !s.done).sort((a, b) => (a.due || "9").localeCompare(b.due || "9")).slice(0, 4);
     return `
@@ -620,17 +620,24 @@ const togglePlayer = () => $("#player").classList.toggle("collapsed");
 $("#music-toggle").addEventListener("click", togglePlayer);
 $("#music-toggle-m").addEventListener("click", togglePlayer);
 
-function enter(withMusic) {
+/* ---------- Pantalla de entrada ---------- */
+let entered = false;
+function enter() {
+  if (entered) return;
+  entered = true;
   $("#splash").classList.add("hidden");
-  try { sessionStorage.setItem("manuhq-entered", "1"); } catch (e) { /* ignorar */ }
-  if (withMusic) {
-    $("#player").classList.remove("collapsed");
-    wantPlay = true;
-    if (spotify) spotify.play();
-  }
+  $("#player").classList.remove("collapsed");
+  wantPlay = true;
+  if (spotify) spotify.play();
+  clearInterval(clockTimer);
 }
-$("#enter-btn").addEventListener("click", () => enter(true));
-$("#enter-silent").addEventListener("click", () => enter(false));
+$("#enter-btn").addEventListener("click", enter);
+document.addEventListener("keydown", (e) => { if (!entered && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); enter(); } });
+
 $("#splash-date").textContent = new Date().toLocaleDateString("es-UY", { weekday: "long", day: "numeric", month: "long" });
+$("#splash-session").textContent = ROUTINE[new Date().getDay()].title;
+const tick = () => { $("#splash-clock").textContent = new Date().toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }); };
+tick();
+const clockTimer = setInterval(tick, 1000 * 10);
 
 render();
