@@ -8,8 +8,6 @@
 const PLAYLIST = "spotify:playlist:1sBTc7WolPCShgS43THVEC";
 const PLAN73 = "https://manu-alz.github.io/Plan-73/";
 const STORE_KEY = "manuhq-v1";
-/* Client ID de tu app de Spotify (developer.spotify.com). Si está vacío, el botón "Conectar Spotify" lo pide. */
-const SPOTIFY_CLIENT_ID = "";
 
 /* ---------- Helpers base ---------- */
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -154,9 +152,9 @@ function buildRoutine() {
     const L = w.s;
     let items, tg;
     if (b.s[L]) { items = b.s[L].map((e) => ({ n: e[0], rx: e[1], note: e[2], key: !!e[3] })); tg = L === "C" ? "judo" : "gym"; }
-    else if (L === "S") { items = [{ n: "Sprints de 20 s", note: "Ver tabla de sprints en Plan-73" }, { n: "Movilidad" }]; tg = "fisico"; }
+    else if (/^S/.test(L)) { items = [{ n: "Sprints de 20 s", note: "Ver tabla de sprints en Plan-73" }, { n: "Movilidad" }]; tg = "fisico"; }
     else { items = [{ n: "Estiramiento largo", rx: "30–60 min" }]; tg = "estiramientos"; }
-    return { day, letter: L, title: w.t, tag: tg, items, warm: PLAN.W && b.s[L] ? PLAN.W : null, stretch: PLAN.SS ? PLAN.SS[L] : null };
+    return { day, letter: L, title: w.t, sub: w.sub || "", tag: tg, items, warm: PLAN.W && b.s[L] ? PLAN.W : null, stretch: PLAN.SS ? PLAN.SS[L] : null };
   }).sort((a, c) => a.day - c.day).map((d) => ({ ...d, name: DAY_NAMES[d.day] }));
 }
 async function loadPlan73() {
@@ -170,7 +168,8 @@ async function loadPlan73() {
     const week = [...doc.querySelectorAll(".week .day")].map((el) => ({
       d: el.querySelector(".d")?.textContent.trim(),
       s: el.querySelector(".s")?.textContent.trim(),
-      t: el.querySelector(".t")?.textContent.trim(),
+      t: (el.querySelector(".t b") || el.querySelector(".t"))?.textContent.trim(),
+      sub: el.querySelector(".t b") ? [...el.querySelector(".t").childNodes].filter((n) => n.nodeName !== "B").map((n) => n.textContent).join(" ").replace(/\s+/g, " ").trim() : "",
     }));
     // Los bloques están como JS en mi propia página de Plan-73: tomo esa parte del script y la evalúo.
     const src = [...doc.scripts].map((s) => s.textContent).find((t) => t.includes("const blocks"));
@@ -187,8 +186,10 @@ async function loadPlan73() {
   render();
 }
 const isLift = (d) => /^[A-D]$/.test(d.letter);
-const sessionName = (d) => `<span class="letter ${isLift(d) ? "" : "plain"}">${isLift(d) ? d.letter : d.letter === "S" ? "S" : "·"}</span>${esc(d.title)}`;
-const sessionText = (d) => isLift(d) ? `${d.letter} · ${d.title}` : d.title;
+const isSprint = (d) => /^S/.test(d.letter);
+const letterOf = (d) => isLift(d) ? d.letter : isSprint(d) ? "S" : "—";
+const sessionName = (d) => `<span class="letter ${isLift(d) ? "" : "plain"}">${isLift(d) ? d.letter : isSprint(d) ? "S" : "·"}</span>${esc(d.title)}`;
+const sessionText = (d) => `${isLift(d) ? `${d.letter} · ` : ""}${d.title}${d.sub ? ` (${d.sub})` : ""}`;
 const syncBadge = () => ({
   live: `<span class="sync ok">● Sincronizado con Plan-73</span>`,
   cache: `<span class="sync">● Plan-73 (guardado)</span>`,
@@ -297,8 +298,8 @@ function weekStrip(selDay, clickable) {
     const isToday = dow === new Date().getDay();
     return `<button class="wd ${isToday ? "today" : ""} ${selDay === dow ? "sel" : ""}" ${clickable ? `data-act="sel-day" data-day="${dow}"` : `data-act="goto-rutina" data-day="${dow}"`}>
       <span class="dn">${DAY_SHORT[dow]} ${done ? `<span class="ok">✓</span>` : isToday ? `<span class="now"></span>` : ""}</span>
-      <span class="lt">${isLift(d) ? d.letter : d.letter === "S" ? "S" : "—"}</span>
-      <span class="dt">${esc(d.title)}</span>
+      <span class="lt">${letterOf(d)}</span>
+      <span class="dt">${esc(d.title)}${d.sub ? `<br><span class="muted">${esc(d.sub)}</span>` : ""}</span>
     </button>`;
   }).join("")}</div>`;
 }
@@ -330,7 +331,7 @@ const VIEWS = {
       <div class="card hero c-8">
         <div class="card-head" style="margin-bottom:0"><span class="label-sm" style="color:var(--accent)">Hoy toca</span>${syncBadge()}</div>
         <h2>${sessionName(d)}</h2>
-        <div class="meta">${tag(d.tag)}<span class="sub mono small muted">${esc(blockLabel())}</span></div>
+        <div class="meta">${d.sub ? `<span class="muted">${esc(d.sub)}</span>` : ""}${tag(d.tag)}<span class="sub mono small muted">${esc(blockLabel())}</span></div>
         ${exList(d)}
         <div class="hero-actions">
           <button class="btn ${doneToday ? "" : "btn-primary"}" data-act="done-today" ${doneToday ? "disabled" : ""}>${doneToday ? "✓ Hecho hoy" : "Marcar como hecho"}</button>
@@ -870,162 +871,42 @@ document.addEventListener("click", (e) => {
 });
 
 /* =========================================================
-   Música
-   - Modo completo: Spotify Web Playback SDK (Premium, compu).
-     Controles propios: aleatorio, anterior, play, siguiente,
-     repetir, barra de progreso y VOLUMEN.
-   - Modo simple: reproductor embebido de Spotify (celu o sin conectar).
+   Música: reproductor de Spotify embebido, en modo oscuro,
+   fijo abajo. Funciona con la cuenta gratis.
    ========================================================= */
-const SP_SCOPES = "streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state";
-const spRedirect = () => location.origin + location.pathname;
-const spClientId = () => SPOTIFY_CLIENT_ID || lsGet("manuhq-sp-client") || "";
-const isMobile = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-let sp = null, spDevice = null, spState = null, wantPlay = false, embedCtl = null;
-let spTokens = JSON.parse(lsGet("manuhq-sp-tokens") || "null");
-
-const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-async function spLogin() {
-  let id = spClientId();
-  if (!id) {
-    id = (prompt("Pegá el Client ID de tu app de Spotify (developer.spotify.com → Dashboard):") || "").trim();
-    if (!id) return;
-    lsSet("manuhq-sp-client", id);
-  }
-  const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
-  const challenge = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
-  lsSet("manuhq-sp-verifier", verifier);
-  const p = new URLSearchParams({ response_type: "code", client_id: id, scope: SP_SCOPES, code_challenge_method: "S256", code_challenge: challenge, redirect_uri: spRedirect() });
-  location.href = "https://accounts.spotify.com/authorize?" + p;
+let wantPlay = false, embedCtl = null, isPlaying = false;
+/* Reintenta el play: si entrás mientras el reproductor todavía carga, la primera orden se puede perder */
+function tryPlay(n = 25) {
+  if (isPlaying || !wantPlay) return;
+  if (embedCtl) embedCtl.play();
+  if (n > 0) setTimeout(() => tryPlay(n - 1), 1200);
 }
-async function spTokenRequest(body) {
-  const r = await fetch("https://accounts.spotify.com/api/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(body) });
-  if (!r.ok) throw new Error("token " + r.status);
-  const j = await r.json();
-  spTokens = { access: j.access_token, refresh: j.refresh_token || spTokens?.refresh, exp: Date.now() + (j.expires_in - 60) * 1000 };
-  lsSet("manuhq-sp-tokens", JSON.stringify(spTokens));
-}
-async function spHandleRedirect() {
-  const q = new URLSearchParams(location.search);
-  if (!q.get("code") && !q.get("error")) return;
-  history.replaceState(null, "", spRedirect() + location.hash);
-  if (q.get("error")) { toast("Spotify no se conectó"); return; }
-  try {
-    await spTokenRequest({ client_id: spClientId(), grant_type: "authorization_code", code: q.get("code"), redirect_uri: spRedirect(), code_verifier: lsGet("manuhq-sp-verifier") });
-    toast("Spotify conectado ✓");
-  } catch (e) { toast("No pude conectar Spotify"); }
-}
-async function spToken() {
-  if (!spTokens) throw new Error("sin tokens");
-  if (Date.now() > spTokens.exp) await spTokenRequest({ client_id: spClientId(), grant_type: "refresh_token", refresh_token: spTokens.refresh });
-  return spTokens.access;
-}
-async function spApi(method, path, body) {
-  const r = await fetch("https://api.spotify.com/v1" + path, { method, headers: { Authorization: "Bearer " + await spToken(), "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-  if (!r.ok && r.status !== 204) throw new Error("api " + r.status);
-}
-function spDisconnect(msg) {
-  spTokens = null; lsDel("manuhq-sp-tokens");
-  if (sp) { try { sp.disconnect(); } catch (e) { /* ignorar */ } sp = null; }
-  if (msg) toast(msg);
-  startEmbed();
-}
-
-function startSDK() {
-  window.onSpotifyWebPlaybackSDKReady = () => {
-    sp = new Spotify.Player({ name: "Manu HQ", getOAuthToken: (cb) => spToken().then(cb).catch(() => spDisconnect("Spotify se desconectó")), volume: (+(lsGet("manuhq-vol") || 60)) / 100 });
-    sp.addListener("ready", ({ device_id }) => { spDevice = device_id; $("#player").classList.add("sdk"); if (wantPlay) spStart(); });
-    sp.addListener("player_state_changed", spRender);
-    sp.addListener("account_error", () => spDisconnect("El control completo necesita Spotify Premium"));
-    sp.addListener("authentication_error", () => spDisconnect("Volvé a conectar Spotify"));
-    sp.addListener("initialization_error", () => spDisconnect());
-    sp.connect();
-  };
-  const s = document.createElement("script"); s.src = "https://sdk.scdn.co/spotify-player.js"; document.head.appendChild(s);
-}
-async function spStart() {
-  if (!sp || !spDevice) return;
-  try { sp.activateElement && await sp.activateElement(); } catch (e) { /* ignorar */ }
-  if (spState && spState.context?.uri === PLAYLIST) { sp.resume(); return; }
-  try { await spApi("PUT", `/me/player/play?device_id=${spDevice}`, { context_uri: PLAYLIST }); }
-  catch (e) { toast("No pude arrancar la playlist"); }
-}
-const fmtMs = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
-let spTick = null, seeking = false;
-function setRange(el, v) { el.value = v; el.style.setProperty("--v", (v / el.max) * 100 + "%"); }
-function spRender(st) {
-  spState = st;
-  if (!st) return;
-  const t = st.track_window.current_track;
-  $("#pl-title").textContent = t.name;
-  $("#pl-artist").textContent = t.artists.map((a) => a.name).join(", ");
-  const img = t.album.images.slice().sort((a, b) => (a.width || 0) - (b.width || 0)).find((i) => (i.width || 300) >= 64) || t.album.images[0];
-  $("#pl-cover").style.backgroundImage = img ? `url("${img.url}")` : "";
-  $("#pl-play-icon").innerHTML = st.paused ? '<path d="M8 5v14l11-7z"/>' : '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
-  $("#pl-shuffle").classList.toggle("on", st.shuffle);
-  $("#pl-repeat").classList.toggle("on", st.repeat_mode > 0);
-  $("#pl-repeat").classList.toggle("one", st.repeat_mode === 2);
-  $("#pl-dur").textContent = fmtMs(st.duration);
-  $("#pl-restore").classList.toggle("playing", !st.paused);
-  $("#pl-restore-label").textContent = st.paused ? "Música" : t.name;
-  const base = Date.now(), pos0 = st.position;
-  clearInterval(spTick);
-  const upd = () => {
-    const pos = st.paused ? pos0 : Math.min(st.duration, pos0 + (Date.now() - base));
-    $("#pl-pos").textContent = fmtMs(pos);
-    if (!seeking) setRange($("#pl-seek"), st.duration ? Math.round((pos / st.duration) * 1000) : 0);
-  };
-  upd(); if (!st.paused) spTick = setInterval(upd, 500);
-}
-$("#pl-play").addEventListener("click", () => { if (!sp) return; spState ? sp.togglePlay() : spStart(); });
-$("#pl-prev").addEventListener("click", () => sp && sp.previousTrack());
-$("#pl-next").addEventListener("click", () => sp && sp.nextTrack());
-$("#pl-shuffle").addEventListener("click", () => spState && spApi("PUT", `/me/player/shuffle?state=${!spState.shuffle}&device_id=${spDevice}`).catch(() => {}));
-$("#pl-repeat").addEventListener("click", () => { if (!spState) return; const next = ["context", "track", "off"][spState.repeat_mode]; spApi("PUT", `/me/player/repeat?state=${next}&device_id=${spDevice}`).catch(() => {}); });
-const seekEl = $("#pl-seek");
-seekEl.addEventListener("input", () => { seeking = true; setRange(seekEl, +seekEl.value); if (spState) $("#pl-pos").textContent = fmtMs((seekEl.value / 1000) * spState.duration); });
-seekEl.addEventListener("change", () => { seeking = false; if (sp && spState) sp.seek(Math.round((seekEl.value / 1000) * spState.duration)); });
-const volEl = $("#pl-volume");
-let lastVol = +(lsGet("manuhq-vol") || 60);
-function applyVol(v) {
-  setRange(volEl, v); lsSet("manuhq-vol", String(v)); if (v > 0) lastVol = v;
-  $("#pl-vol-icon").innerHTML = v === 0 ? '<path d="M11 5 6 9H2v6h4l5 4V5zM23 9l-6 6M17 9l6 6"/>' : v < 50 ? '<path d="M11 5 6 9H2v6h4l5 4V5zM15.5 8.5a5 5 0 0 1 0 7"/>' : '<path d="M11 5 6 9H2v6h4l5 4V5zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>';
-  if (sp) sp.setVolume(v / 100);
-}
-volEl.addEventListener("input", () => applyVol(+volEl.value));
-$("#pl-mute").addEventListener("click", () => applyVol(+volEl.value === 0 ? lastVol : 0));
-applyVol(+(lsGet("manuhq-vol") || 60));
-$("#pl-connect").addEventListener("click", spLogin);
-
-/* Minimizar / mostrar */
 function setPlayerHidden(h) { document.body.classList.toggle("pl-hidden", h); lsSet("manuhq-pl-hidden", h ? "1" : ""); }
 $("#pl-min").addEventListener("click", () => setPlayerHidden(true));
 $("#pl-restore").addEventListener("click", () => setPlayerHidden(false));
 if (lsGet("manuhq-pl-hidden")) setPlayerHidden(true);
 
-/* Modo simple: embed */
-function startEmbed() {
-  $("#player").classList.remove("sdk");
-  if (embedCtl) return;
+function initMusic() {
   window.onSpotifyIframeApiReady = (IFrameAPI) => {
-    IFrameAPI.createController($("#pl-embed"), { uri: PLAYLIST, width: "100%", height: 80 }, (ctrl) => {
+    IFrameAPI.createController($("#pl-embed"), { uri: PLAYLIST, width: "100%", height: 80, theme: "dark" }, (ctrl) => {
       embedCtl = ctrl;
-      ctrl.addListener("ready", () => { if (wantPlay) ctrl.play(); });
-      ctrl.addListener("playback_update", (e) => $("#pl-restore").classList.toggle("playing", !e.data.isPaused));
+      ctrl.addListener("ready", () => tryPlay());
+      ctrl.addListener("playback_update", (e) => {
+        const playing = !e.data.isPaused; isPlaying = playing;
+        if (playing) wantPlay = false;   // ya arrancó: no volver a forzar el play si después pausás
+        $("#pl-restore").classList.toggle("playing", playing);
+        $("#player").classList.toggle("playing", playing);
+      });
     });
   };
   const s = document.createElement("script"); s.src = "https://open.spotify.com/embed/iframe-api/v1"; s.async = true; document.head.appendChild(s);
-}
-async function initMusic() {
-  await spHandleRedirect();
-  if (spTokens && spClientId() && !isMobile()) startSDK();
-  else startEmbed();
 }
 
 /* Atajo: barra espaciadora = play/pausa (si no estás escribiendo) */
 document.addEventListener("keydown", (e) => {
   if (e.code !== "Space" || !entered || /INPUT|TEXTAREA|SELECT|BUTTON/.test(document.activeElement.tagName)) return;
   e.preventDefault();
-  if (sp) sp.togglePlay(); else if (embedCtl) embedCtl.togglePlay();
+  if (embedCtl) embedCtl.togglePlay();
 });
 
 /* =========================================================
@@ -1037,7 +918,7 @@ function enter() {
   entered = true;
   $("#splash").classList.add("hidden");
   wantPlay = true;
-  if (sp) spStart(); else if (embedCtl) embedCtl.play();
+  tryPlay();
   clearInterval(clockTimer);
 }
 $("#enter-btn").addEventListener("click", enter);

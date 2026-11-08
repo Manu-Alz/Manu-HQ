@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,500..900&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=5" />
+  <link rel="stylesheet" href="styles.css?v=12" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%234d7cff'/><text x='50' y='68' font-family='Arial Black' font-size='48' font-weight='900' text-anchor='middle' fill='white'>HQ</text></svg>" />
 </head>
 <body>
@@ -89,41 +89,13 @@
 
   <!-- ============ Reproductor (abajo, estilo Spotify) ============ -->
   <footer id="player" class="player">
-    <div class="pl-left">
-      <div class="pl-cover" id="pl-cover"></div>
-      <div class="pl-meta">
-        <div class="pl-title" id="pl-title">Mi playlist</div>
-        <div class="pl-artist" id="pl-artist">Spotify</div>
-      </div>
+    <div class="pl-tag">
+      <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <span><b>Radio HQ</b><small>Mi playlist</small></span>
     </div>
-
-    <!-- Modo completo (Spotify conectado) -->
-    <div class="pl-center sdk-only">
-      <div class="pl-controls">
-        <button class="pl-btn" id="pl-shuffle" title="Aleatorio" aria-label="Aleatorio"><svg viewBox="0 0 24 24"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg></button>
-        <button class="pl-btn" id="pl-prev" title="Anterior" aria-label="Anterior"><svg viewBox="0 0 24 24" class="fill"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button>
-        <button class="pl-play" id="pl-play" title="Reproducir / pausar" aria-label="Reproducir o pausar"><svg viewBox="0 0 24 24" class="fill" id="pl-play-icon"><path d="M8 5v14l11-7z"/></svg></button>
-        <button class="pl-btn" id="pl-next" title="Siguiente" aria-label="Siguiente"><svg viewBox="0 0 24 24" class="fill"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg></button>
-        <button class="pl-btn" id="pl-repeat" title="Repetir" aria-label="Repetir"><svg viewBox="0 0 24 24"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/></svg></button>
-      </div>
-      <div class="pl-progress">
-        <span id="pl-pos">0:00</span>
-        <input type="range" id="pl-seek" min="0" max="1000" value="0" aria-label="Posición" />
-        <span id="pl-dur">0:00</span>
-      </div>
-    </div>
-
-    <!-- Modo embebido (sin conectar) -->
-    <div class="pl-center embed-only">
-      <div id="pl-embed"></div>
-    </div>
-
+    <div class="pl-embed-wrap"><div id="pl-embed"></div></div>
     <div class="pl-right">
-      <button class="btn btn-sm embed-only" id="pl-connect" title="Volumen, saltear temas y más">Conectar Spotify</button>
-      <div class="pl-vol sdk-only">
-        <button class="pl-btn" id="pl-mute" aria-label="Silenciar"><svg viewBox="0 0 24 24" id="pl-vol-icon"><path d="M11 5 6 9H2v6h4l5 4V5zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg></button>
-        <input type="range" id="pl-volume" min="0" max="100" value="60" aria-label="Volumen" />
-      </div>
+      <a class="pl-open" href="https://open.spotify.com/playlist/1sBTc7WolPCShgS43THVEC" target="_blank" rel="noopener">Abrir en Spotify ↗</a>
       <button class="pl-btn" id="pl-min" title="Minimizar" aria-label="Minimizar reproductor"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
     </div>
   </footer>
@@ -132,7 +104,7 @@
     <span id="pl-restore-label">Música</span>
   </button>
 
-  <script src="judo-data.js?v=5"></script>
-  <script src="app.js?v=5"></script>
+  <script src="judo-data.js?v=12"></script>
+  <script src="app.js?v=12"></script>
 </body>
 </html>
