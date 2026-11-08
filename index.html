@@ -5,14 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Manu HQ</title>
   <meta name="description" content="Mi hub personal: entreno, judo, surf, proyectos, estudio e ideas." />
+  <meta name="theme-color" content="#05060a" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,500..900&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>" />
+  <link rel="stylesheet" href="styles.css?v=5" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%234d7cff'/><text x='50' y='68' font-family='Arial Black' font-size='48' font-weight='900' text-anchor='middle' fill='white'>HQ</text></svg>" />
 </head>
 <body>
-  <!-- Pantalla de entrada: el clic permite arrancar la música -->
+  <!-- ============ Pantalla de entrada ============ -->
   <div id="splash">
     <div class="splash-glow"></div>
     <div class="splash-top">
@@ -42,6 +43,8 @@
       <p class="hint"><span class="desk"><kbd>Enter</kbd> para empezar</span><span class="touch">Tocá para empezar</span> · con música</p>
     </div>
 
+    <figure class="splash-quote" id="splash-quote"></figure>
+
     <svg class="waves" viewBox="0 0 2880 160" preserveAspectRatio="none" aria-hidden="true">
       <path class="w1" d="M0 80 Q 180 30 360 80 T 720 80 T 1080 80 T 1440 80 T 1800 80 T 2160 80 T 2520 80 T 2880 80 V160 H0Z"/>
       <path class="w2" d="M0 100 Q 240 60 480 100 T 960 100 T 1440 100 T 1920 100 T 2400 100 T 2880 100 V160 H0Z"/>
@@ -49,37 +52,87 @@
     </svg>
   </div>
 
+  <!-- ============ App ============ -->
   <div class="app">
     <aside class="sidebar" id="sidebar">
-      <div class="brand">MANU<span>HQ</span></div>
+      <a class="brand" href="#inicio">MANU<span>HQ</span></a>
       <nav id="nav"></nav>
       <div class="sidebar-foot">
-        <button class="btn btn-ghost btn-sm" id="export-btn">⬇ Exportar datos</button>
-        <label class="btn btn-ghost btn-sm">⬆ Importar
+        <button class="btn btn-ghost btn-sm" id="export-btn">Exportar datos</button>
+        <label class="btn btn-ghost btn-sm">Importar datos
           <input type="file" id="import-file" accept="application/json" hidden />
         </label>
       </div>
     </aside>
 
-    <header class="topbar">
-      <button class="icon-btn" id="menu-btn" aria-label="Menú">☰</button>
-      <div class="brand">MANU<span>HQ</span></div>
-      <button class="icon-btn" id="music-toggle-m" aria-label="Música">♫</button>
-    </header>
-
-    <main id="view"></main>
-  </div>
-
-  <!-- Reproductor de Spotify flotante -->
-  <div id="player" class="player collapsed">
-    <div class="player-bar">
-      <span>♫ Mi playlist</span>
-      <button class="icon-btn" id="music-toggle" aria-label="Mostrar u ocultar reproductor">▾</button>
+    <div class="main-col">
+      <header class="topbar">
+        <button class="icon-btn only-m" id="menu-btn" aria-label="Menú">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+        <a class="brand only-m" href="#inicio">MANU<span>HQ</span></a>
+        <form class="quick-idea" id="quick-idea" autocomplete="off">
+          <span class="qi-icon" aria-hidden="true">💡</span>
+          <input name="text" placeholder="Anotá una idea y Enter…" aria-label="Nueva idea" />
+          <button class="qi-btn" aria-label="Guardar idea">Guardar</button>
+        </form>
+        <div class="topbar-right">
+          <span id="top-sync"></span>
+          <span class="top-date" id="top-date"></span>
+        </div>
+      </header>
+      <main id="view"></main>
     </div>
-    <div id="spotify-embed"></div>
   </div>
 
-  <script src="https://open.spotify.com/embed/iframe-api/v1" async></script>
-  <script src="app.js"></script>
+  <div id="toast" class="toast" role="status"></div>
+
+  <!-- ============ Reproductor (abajo, estilo Spotify) ============ -->
+  <footer id="player" class="player">
+    <div class="pl-left">
+      <div class="pl-cover" id="pl-cover"></div>
+      <div class="pl-meta">
+        <div class="pl-title" id="pl-title">Mi playlist</div>
+        <div class="pl-artist" id="pl-artist">Spotify</div>
+      </div>
+    </div>
+
+    <!-- Modo completo (Spotify conectado) -->
+    <div class="pl-center sdk-only">
+      <div class="pl-controls">
+        <button class="pl-btn" id="pl-shuffle" title="Aleatorio" aria-label="Aleatorio"><svg viewBox="0 0 24 24"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg></button>
+        <button class="pl-btn" id="pl-prev" title="Anterior" aria-label="Anterior"><svg viewBox="0 0 24 24" class="fill"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button>
+        <button class="pl-play" id="pl-play" title="Reproducir / pausar" aria-label="Reproducir o pausar"><svg viewBox="0 0 24 24" class="fill" id="pl-play-icon"><path d="M8 5v14l11-7z"/></svg></button>
+        <button class="pl-btn" id="pl-next" title="Siguiente" aria-label="Siguiente"><svg viewBox="0 0 24 24" class="fill"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg></button>
+        <button class="pl-btn" id="pl-repeat" title="Repetir" aria-label="Repetir"><svg viewBox="0 0 24 24"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/></svg></button>
+      </div>
+      <div class="pl-progress">
+        <span id="pl-pos">0:00</span>
+        <input type="range" id="pl-seek" min="0" max="1000" value="0" aria-label="Posición" />
+        <span id="pl-dur">0:00</span>
+      </div>
+    </div>
+
+    <!-- Modo embebido (sin conectar) -->
+    <div class="pl-center embed-only">
+      <div id="pl-embed"></div>
+    </div>
+
+    <div class="pl-right">
+      <button class="btn btn-sm embed-only" id="pl-connect" title="Volumen, saltear temas y más">Conectar Spotify</button>
+      <div class="pl-vol sdk-only">
+        <button class="pl-btn" id="pl-mute" aria-label="Silenciar"><svg viewBox="0 0 24 24" id="pl-vol-icon"><path d="M11 5 6 9H2v6h4l5 4V5zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg></button>
+        <input type="range" id="pl-volume" min="0" max="100" value="60" aria-label="Volumen" />
+      </div>
+      <button class="pl-btn" id="pl-min" title="Minimizar" aria-label="Minimizar reproductor"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+    </div>
+  </footer>
+  <button id="pl-restore" class="pl-restore" aria-label="Mostrar reproductor">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+    <span id="pl-restore-label">Música</span>
+  </button>
+
+  <script src="judo-data.js?v=5"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>
