@@ -20,7 +20,7 @@
   --amber: #ffc46b;
   --pink: #ff8fc7;
   --radius: 16px;
-  --pl-h: 84px;
+  --pl-h: 104px;
   --side-w: 244px;
   --font: "Geist", system-ui, sans-serif;
   --mono: "Geist Mono", ui-monospace, monospace;
@@ -35,7 +35,6 @@ body {
   -webkit-font-smoothing: antialiased;
   padding-bottom: var(--pl-h);
 }
-body.pl-hidden { padding-bottom: 0; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 h1, h2, h3 { font-family: var(--display); margin: 0; line-height: 1.15; font-weight: 700; }
@@ -163,13 +162,12 @@ kbd { font: 11px var(--mono); padding: 2px 6px; border-radius: 5px; border: 1px 
 /* ===================================================== */
 /* Estructura                                             */
 /* ===================================================== */
-.app { display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); min-height: calc(100vh - var(--pl-h)); }
+.app { display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); min-height: 100vh; }
 .sidebar {
-  position: sticky; top: 0; height: calc(100vh - var(--pl-h));
+  position: sticky; top: 0; height: 100vh;
   background: var(--bg-2); border-right: 1px solid var(--line);
   display: flex; flex-direction: column; padding: 22px 14px 16px; gap: 18px; overflow-y: auto;
 }
-body.pl-hidden .sidebar { height: 100vh; }
 .brand { font-family: var(--display); font-weight: 800; font-stretch: 125%; font-size: 21px; padding: 0 10px; color: var(--text); letter-spacing: -.01em; }
 .brand:hover { text-decoration: none; }
 .brand span { color: var(--accent); }
@@ -445,46 +443,69 @@ td.num, th.num { text-align: right; font-family: var(--mono); white-space: nowra
 .project .links { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* ===================================================== */
-/* Reproductor                                            */
+/* Spotify flotando                                       */
 /* ===================================================== */
+/* Sin barra: solo el widget de Spotify, flotando unos pixeles arriba del borde */
 .player {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 100; height: var(--pl-h);
-  display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr) auto; align-items: center;
-  padding-right: 12px; background: #000; border-top: 1px solid #14161f;
-  transition: transform .35s cubic-bezier(.4,0,.2,1);
+  position: fixed; left: var(--side-w); right: 0; bottom: 12px; z-index: 100;
+  display: flex; justify-content: center; padding: 0 16px;
+  pointer-events: none; background: none;
 }
-body.pl-hidden .player { transform: translateY(100%); }
-.pl-tag { display: flex; align-items: center; gap: 12px; padding: 0 24px; min-width: 0; }
-.pl-tag b { display: block; font: 800 14px var(--display); font-stretch: 115%; letter-spacing: .01em; }
-.pl-tag small { display: block; font: 400 10.5px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
-.eq { display: flex; align-items: flex-end; gap: 3px; height: 18px; width: 22px; flex: none; }
-.eq i { flex: 1; height: 30%; border-radius: 2px; background: var(--grad); transition: height .3s; }
-.player.playing .eq i { animation: eq 1s ease-in-out infinite; }
-.player.playing .eq i:nth-child(2) { animation-delay: -.3s; }
-.player.playing .eq i:nth-child(3) { animation-delay: -.6s; }
-.player.playing .eq i:nth-child(4) { animation-delay: -.15s; }
-@keyframes eq { 0%, 100% { height: 25%; } 50% { height: 100%; } }
-.pl-embed-wrap { min-width: 0; padding: 0 clamp(16px, 3vw, 40px); display: flex; justify-content: center; }
-/* El embed de Spotify se rompe si es demasiado ancho: lo limito y lo centro */
-.pl-embed-wrap > * { width: 100%; max-width: 760px; }
-.pl-right { display: flex; align-items: center; gap: 4px; }
-.pl-open { font: 500 12px var(--font); color: var(--muted); padding: 8px 10px; border-radius: 8px; white-space: nowrap; }
-.pl-open:hover { color: #fff; background: #11131b; text-decoration: none; }
-#pl-embed, .pl-embed-wrap iframe { display: block; width: 100%; height: 80px; border: 0; border-radius: 12px; background: #121212; }
-.pl-btn { background: none; border: 0; cursor: pointer; color: #8a92a8; padding: 8px; display: grid; place-items: center; border-radius: 8px; transition: color .15s, background .15s; }
-.pl-btn:hover { color: #fff; background: #11131b; }
-.pl-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.player > * , .player iframe {
+  pointer-events: auto; display: block; width: 100%; max-width: 760px; height: 80px;
+  border: 0; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.55);
+}
 
-.pl-restore {
-  position: fixed; right: 16px; bottom: 16px; z-index: 99;
-  display: none; align-items: center; gap: 8px; cursor: pointer;
-  padding: 10px 16px; border-radius: 999px; border: 1px solid var(--line-2);
-  background: var(--card-2); color: var(--text); font: 500 13px var(--font);
-  box-shadow: 0 10px 30px rgba(0,0,0,.5);
+/* ===================================================== */
+/* Notas, Plan-73 y Judo                                  */
+/* ===================================================== */
+.list.notes li { align-items: flex-start; }
+.list.notes .grow { white-space: pre-wrap; }
+
+.plan-html { font-size: 13.5px; color: #c3c9da; margin-top: 14px; }
+.plan-html h4 { font: 700 15px var(--display); color: var(--text); margin: 0 0 8px; }
+.plan-html p { margin: 0 0 10px; }
+.plan-html p.lead { color: var(--muted); }
+.plan-html b { color: var(--text); font-weight: 600; }
+.plan-html ul, .plan-html ol { margin: 0 0 10px; padding-left: 20px; display: grid; gap: 6px; }
+.plan-html table { margin: 6px 0 12px; }
+.plan-html td.num { text-align: right; font-family: var(--mono); color: var(--accent); white-space: nowrap; }
+.plan-html.sprint[data-stage="0"] tbody tr:nth-child(1) td,
+.plan-html.sprint[data-stage="1"] tbody tr:nth-child(2) td,
+.plan-html.sprint[data-stage="2"] tbody tr:nth-child(3) td,
+.plan-html.sprint[data-stage="3"] tbody tr:nth-child(4) td { background: rgba(77,124,255,.08); }
+.plan-html.sprint[data-stage="0"] tbody tr:nth-child(1) td:first-child,
+.plan-html.sprint[data-stage="1"] tbody tr:nth-child(2) td:first-child,
+.plan-html.sprint[data-stage="2"] tbody tr:nth-child(3) td:first-child,
+.plan-html.sprint[data-stage="3"] tbody tr:nth-child(4) td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+details.more { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 12px; }
+details.more summary { cursor: pointer; color: var(--accent); font-size: 13px; font-weight: 500; }
+.chip .dot { width: 7px; height: 7px; }
+
+.judo-hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 32px; align-items: center; padding: 12px 0 8px; }
+.jh-kanji {
+  font: 600 clamp(64px, 9vw, 120px)/1 "Noto Serif JP", serif; writing-mode: vertical-rl; letter-spacing: .08em;
+  background: linear-gradient(180deg, #a9c1ff, var(--accent) 55%, #7b5cff); -webkit-background-clip: text; background-clip: text; color: transparent;
 }
-body.pl-hidden .pl-restore { display: inline-flex; }
-.pl-restore.playing svg { color: var(--accent); animation: bob 1.2s ease-in-out infinite; }
-@keyframes bob { 50% { transform: translateY(-2px); } }
+.jh-quote { margin: 6px 0 14px; font: 600 clamp(20px, 2.4vw, 30px)/1.35 var(--font); letter-spacing: -.015em; max-width: 900px; }
+.jh-src { display: flex; align-items: center; gap: 14px; font: 400 11px var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+.pillars-line { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 28px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.pl-item { display: grid; gap: 3px; padding: 20px 20px 20px 0; }
+.pl-item + .pl-item { padding-left: 20px; border-left: 1px solid var(--line); }
+.pl-item .kj { font: 600 30px/1.1 "Noto Serif JP", serif; color: var(--text); margin-bottom: 6px; }
+.pl-item .rm { font: 400 10.5px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+.pl-item b { font: 700 15px var(--display); }
+.pl-item .gl { font: 400 11.5px var(--mono); color: var(--muted); }
+.pl-item .ex { font-size: 13px; color: var(--muted); }
+.waza-total { display: flex; align-items: center; gap: 16px; font: 400 12px var(--mono); color: var(--muted); }
+.waza-total b { color: var(--text); font: 800 18px var(--display); margin-right: 4px; }
+@media (max-width: 900px) {
+  .pillars-line { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pl-item:nth-child(3) { border-left: 0; padding-left: 0; }
+  .pl-item:nth-child(n+3) { border-top: 1px solid var(--line); }
+  .judo-hero { grid-template-columns: 1fr; gap: 8px; }
+  .jh-kanji { writing-mode: horizontal-tb; font-size: 56px; }
+}
 
 /* ===================================================== */
 /* Responsive                                             */
@@ -500,7 +521,7 @@ body.pl-hidden .pl-restore { display: inline-flex; }
   .kanban { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 900px) {
-  :root { --side-w: 0px; --pl-h: 92px; }
+  :root { --side-w: 0px; --pl-h: 100px; }
   .app { grid-template-columns: 1fr; }
   .sidebar {
     position: fixed; inset: 0 auto 0 0; width: 270px; z-index: 150; height: 100vh;
@@ -514,9 +535,6 @@ body.pl-hidden .pl-restore { display: inline-flex; }
   .top-date { display: none; }
   .bento > * { grid-column: span 12 !important; }
   .ex-grid { grid-template-columns: 1fr; }
-  .player { grid-template-columns: minmax(0, 1fr) auto; padding: 0 4px 0 0; }
-  .pl-tag, .pl-open { display: none; }
-  .pl-embed-wrap { padding: 0 8px; }
   h1 { font-size: 24px; }
 }
 @media (max-width: 600px) {

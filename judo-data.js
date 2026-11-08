@@ -60,10 +60,10 @@ function wazaOrigin(name) {
 
 /* Los 4 pilares del judo completo */
 const PILLARS = [
-  { id: "salud", name: "Salud", jp: "Rentai-hō · 練体法", desc: "Educación física: un cuerpo fuerte, flexible y útil. Acá entra todo Plan-73." },
-  { id: "deporte", name: "Deporte", jp: "Shōbu-hō · 勝負法", desc: "Randori, shiai y competencia. Aprender a ganar y a perder con el mismo respeto." },
-  { id: "comunidad", name: "Comunidad", jp: "Jita kyōei · 自他共栄", desc: "Bienestar y beneficio mutuo: el dojo, los compañeros, enseñar y devolver." },
-  { id: "defensa", name: "Defensa personal", jp: "Goshin-jutsu · 護身術", desc: "El origen marcial: Kime-no-kata, Kodokan Goshin-jutsu y saber protegerte." },
+  { id: "salud", kanji: "練体", glyphs: "練 entrenar · 体 cuerpo", romaji: "Rentai-hō", name: "Salud", short: "Formar el cuerpo: fuerte, flexible y útil." },
+  { id: "deporte", kanji: "勝負", glyphs: "勝 ganar · 負 perder", romaji: "Shōbu-hō", name: "Deporte", short: "Ganar y perder con el mismo respeto." },
+  { id: "comunidad", kanji: "自他共栄", glyphs: "自 uno · 他 otro · 共 juntos · 栄 prosperar", romaji: "Jita kyōei", name: "Comunidad", short: "Prosperar juntos: yo y los demás." },
+  { id: "defensa", kanji: "護身", glyphs: "護 proteger · 身 cuerpo", romaji: "Goshin-jutsu", name: "Defensa personal", short: "Proteger el cuerpo: el origen marcial." },
 ];
 
 /* Frases y datos: aparece uno al azar en cada entrada */

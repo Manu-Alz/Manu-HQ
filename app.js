@@ -84,6 +84,7 @@ const DEFAULT_STATE = {
   spots: [{ id: uid(), text: "La Paloma", done: false }, { id: uid(), text: "Punta del Diablo", done: false }, { id: uid(), text: "Playa Brava", done: false }],
   places: [],
   uyNotes: "",
+  notes: {},
 };
 
 let S = load();
@@ -94,6 +95,8 @@ function load() {
       const s = { ...structuredClone(DEFAULT_STATE), ...JSON.parse(raw) };
       s.logs = { ...DEFAULT_STATE.logs, ...s.logs };
       s.waza = s.waza || {};
+      s.notes = s.notes || {};
+      if (s.uyNotes && !(s.notes.uruguay || []).length) s.notes.uruguay = [{ id: uid(), text: s.uyNotes, date: today() }];
       return s;
     }
   } catch (e) { /* datos corruptos: arranco limpio */ }
@@ -118,66 +121,115 @@ let ROUTINE = [
 ].map((d, i) => ({ ...d, day: i, name: DAY_NAMES[i] }));
 let PLAN = null;
 let planStatus = "offline";
+let viewBlock = null;      // bloque que estás mirando en Rutina (por defecto, el actual de Plan-73)
 
-function planWeek() {
-  if (!S.planStart) return null;
-  const days = Math.floor((new Date(today() + "T12:00:00") - new Date(S.planStart + "T12:00:00")) / 864e5);
-  return days < 0 ? null : Math.floor(days / 7) + 1;
-}
+/* Bloque actual = el último que abriste en Plan-73 (misma web, mismo almacenamiento) */
 function currentBlock() {
   if (!PLAN) return null;
-  const find = (id) => PLAN.blocks.find((b) => b.id === id);
-  const w = planWeek();
-  if (w) {
-    if (w <= 4) return { ...find("b1"), deload: w === 4 };
-    if (w <= 10) return find("b2");
-    if (w <= 16) return find("b3");
-    const pos = (w - 17) % 13;
-    if (pos === 0) return { ...find("b3"), deload: true };
-    return pos <= 6 ? find("b2") : find("b3");
-  }
-  const id = lsGet("bloque") || "b1";       // el último bloque que abriste en Plan-73
-  return find(id) || PLAN.blocks[0];
+  const id = lsGet("bloque") || "b1";
+  return PLAN.blocks.find((b) => b.id === id) || PLAN.blocks[0];
 }
-function blockLabel() {
-  const b = currentBlock(); if (!b) return "";
-  const w = planWeek();
-  return `${b.name}${w ? ` · Semana ${w}` : ""}${b.deload ? " · Descarga" : ""}`;
+function shownBlock() {
+  if (!PLAN) return null;
+  return PLAN.blocks.find((b) => b.id === viewBlock) || currentBlock();
 }
-function buildRoutine() {
-  const b = currentBlock();
-  if (!PLAN || !b || PLAN.week.length !== 7) return;
-  ROUTINE = PLAN.week.map((w, i) => {
+function blockLabel(b = currentBlock()) { return b ? `${b.name} · ${b.title}` : ""; }
+
+/* Copia segura de HTML de Plan-73: solo texto, negritas, listas y tablas */
+const KEEP = { P: "p", B: "b", STRONG: "b", BR: "br", UL: "ul", OL: "ol", LI: "li", TABLE: "table", THEAD: "thead", TBODY: "tbody", TR: "tr", TH: "th", TD: "td", H3: "h4", H4: "h4", EM: "em", I: "em" };
+function clean(node) {
+  return [...node.childNodes].map((n) => {
+    if (n.nodeType === 3) return esc(n.textContent);
+    if (n.nodeType !== 1) return "";
+    const t = KEEP[n.nodeName];
+    if (t === "br") return "<br>";
+    const inner = clean(n);
+    if (!t) return inner;
+    const cls = n.nodeName === "TD" && n.classList.contains("num") ? ' class="num"' : n.nodeName === "P" && n.classList.contains("lead") ? ' class="lead"' : "";
+    return `<${t}${cls}>${inner}</${t}>`;
+  }).join("");
+}
+const cellLines = (td) => clean(td).split(/<br>/).map((s) => s.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").trim()).filter(Boolean);
+const rowsOf = (table) => table ? [...table.querySelectorAll("tbody tr")].map((tr) => [...tr.children].map(cellLines)) : [];
+const STAGE = { b1: 0, b2: 1, b3: 2, pc: 3 };   // fila de la tabla de sprints según el bloque
+
+function buildRoutine() { const r = routineFor(currentBlock()); if (r) ROUTINE = r; }
+function routineFor(b) {
+  if (!PLAN || !b || PLAN.week.length !== 7) return null;
+  return PLAN.week.map((w, i) => {
     const day = (i + 1) % 7;
     const L = w.s;
     let items, tg;
-    if (b.s[L]) { items = b.s[L].map((e) => ({ n: e[0], rx: e[1], note: e[2], key: !!e[3] })); tg = L === "C" ? "judo" : "gym"; }
-    else if (/^S/.test(L)) { items = [{ n: "Sprints de 20 s", note: "Ver tabla de sprints en Plan-73" }, { n: "Movilidad" }]; tg = "fisico"; }
-    else { items = [{ n: "Estiramiento largo", rx: "30–60 min" }]; tg = "estiramientos"; }
-    return { day, letter: L, title: w.t, sub: w.sub || "", tag: tg, items, warm: PLAN.W && b.s[L] ? PLAN.W : null, stretch: PLAN.SS ? PLAN.SS[L] : null };
+    if (b.s[L]) {
+      items = b.s[L].map((e) => ({ n: e[0], rx: e[1], note: e[2], key: !!e[3] }));
+      tg = L === "C" || L === "D" ? "judo" : "gym";
+    } else if (/^S/.test(L)) {
+      const row = PLAN.sprints?.[L]?.rows?.[STAGE[b.id] ?? 0];
+      items = row ? row[1].map((line, k) => ({ n: line, rx: k === 0 ? `pausa ${row[2].join(" ")}` : "" })) : [{ n: w.t }];
+      tg = "fisico";
+    } else {
+      items = (PLAN.rest?.rows || []).map((r) => ({ n: (r[0][0] || "").replace(/^\d+\s*·\s*/, ""), rx: r[0][1] || "", note: r[1].join(" ") }));
+      if (!items.length) items = [{ n: w.t }];
+      tg = "estiramientos";
+    }
+    return { day, letter: L, title: w.t, sub: w.sub || "", tag: tg, items };
   }).sort((a, c) => a.day - c.day).map((d) => ({ ...d, name: DAY_NAMES[d.day] }));
 }
+
 async function loadPlan73() {
   try {
-    const cached = JSON.parse(lsGet("manuhq-plan73") || "null");
+    const cached = JSON.parse(lsGet("manuhq-plan73v2") || "null");
     if (cached) { PLAN = cached; planStatus = "cache"; buildRoutine(); }
   } catch (e) { /* ignorar */ }
   try {
     const html = await fetch(PLAN73, { cache: "no-cache" }).then((r) => r.text());
     const doc = new DOMParser().parseFromString(html, "text/html");
+    const weekEl = doc.querySelector(".week");
     const week = [...doc.querySelectorAll(".week .day")].map((el) => ({
       d: el.querySelector(".d")?.textContent.trim(),
       s: el.querySelector(".s")?.textContent.trim(),
       t: (el.querySelector(".t b") || el.querySelector(".t"))?.textContent.trim(),
       sub: el.querySelector(".t b") ? [...el.querySelector(".t").childNodes].filter((n) => n.nodeName !== "B").map((n) => n.textContent).join(" ").replace(/\s+/g, " ").trim() : "",
     }));
+    const rules = weekEl?.parentElement.querySelector("ul.rules");
     // Los bloques están como JS en mi propia página de Plan-73: tomo esa parte del script y la evalúo.
     const src = [...doc.scripts].map((s) => s.textContent).find((t) => t.includes("const blocks"));
     const code = src.slice(0, src.indexOf("const tabs"));
-    const { blocks, W, SS } = new Function(code + ";return {blocks, W: typeof W!=='undefined'?W:null, SS: typeof SS!=='undefined'?SS:null};")();
-    PLAN = { week, W, SS, blocks: blocks.map(({ id, name, weeks, title, s }) => ({ id, name, weeks, title, s })) };
+    const v = new Function(code + ";return {blocks, W: typeof W!=='undefined'?W:null, SS: typeof SS!=='undefined'?SS:null, SUB: typeof SUB!=='undefined'?SUB:null};")();
+    // Sprints: un panel por día (S1, S2) + calentamiento + reglas
+    const sp = doc.querySelector("#sprints");
+    const sprints = {};
+    if (sp) {
+      sp.querySelectorAll(".panel").forEach((p) => {
+        const h = p.querySelector("h3")?.textContent.trim() || "";
+        const m = h.match(/^(S\d)/);
+        if (m) sprints[m[1]] = { title: h, html: clean(p).replace(/^<h4>.*?<\/h4>/, ""), rows: rowsOf(p.querySelector("table")) };
+        else if (/^Reglas/i.test(h)) sprints.rules = clean(p);
+      });
+      const warmH = [...sp.querySelectorAll("h3")].find((h) => /calentamiento/i.test(h.textContent));
+      if (warmH && warmH.nextElementSibling) sprints.warm = { title: warmH.textContent.trim(), html: clean(warmH.nextElementSibling) };
+    }
+    // Descanso: "Sesión larga" y "Mientras descansás" de la sección de estiramiento
+    const est = doc.querySelector("#estiramiento");
+    let rest = null;
+    if (est) {
+      const panels = [...est.querySelectorAll(".panel")];
+      const long = panels.find((p) => /sesi[oó]n larga/i.test(p.querySelector("h3")?.textContent || ""));
+      const passive = panels.find((p) => /descans/i.test(p.querySelector("h3")?.textContent || ""));
+      rest = {
+        title: long?.querySelector("h3")?.textContent.trim() || "",
+        html: long ? clean(long).replace(/^<h4>.*?<\/h4>/, "") : "",
+        rows: rowsOf(long?.querySelector("table")),
+        passive: passive ? { title: passive.querySelector("h3").textContent.trim(), html: clean(passive).replace(/^<h4>.*?<\/h4>/, "") } : null,
+      };
+    }
+    const updated = doc.querySelector("footer")?.textContent.trim() || "";
+    PLAN = {
+      week, rules: rules ? clean(rules) : "", W: v.W, SS: v.SS, SUB: v.SUB, sprints, rest, updated,
+      blocks: v.blocks.map(({ id, name, weeks, title, intro, s }) => ({ id, name, weeks, title, intro, s })),
+    };
     planStatus = "live";
-    lsSet("manuhq-plan73", JSON.stringify(PLAN));
+    lsSet("manuhq-plan73v2", JSON.stringify(PLAN));
     buildRoutine();
   } catch (e) {
     console.warn("No pude leer Plan-73; uso la versión guardada.", e);
@@ -220,6 +272,21 @@ function tasksCard(area, title = "Pendientes", cls = "") {
           ${area ? "" : tag(t.area)}
           <button class="del" data-act="del-task" data-id="${t.id}" title="Borrar">✕</button>
         </li>`).join("") || `<li class="empty" style="background:none">Nada pendiente.</li>`}
+    </ul>
+  </div>`;
+}
+
+/* Notas propias de cada sección (se guardan solas) */
+function notesCard(key, title = "Notas", cls = "") {
+  const list = S.notes[key] || [];
+  return `
+  <div class="card ${cls}">
+    <div class="card-head"><h2>${title}</h2><span class="sub">${list.length}</span></div>
+    <form class="inline" data-form="note" data-key="${key}">
+      <input name="text" placeholder="Anotá algo…" required /><button class="btn btn-primary">Agregar</button>
+    </form>
+    <ul class="list notes" style="margin-top:12px">
+      ${list.map((n) => `<li><span class="grow">${esc(n.text)}</span><span class="small muted mono">${fmtDate(n.date)}</span><button class="del" data-act="del-note" data-key="${key}" data-id="${n.id}">✕</button></li>`).join("") || `<li class="empty" style="background:none">Sin notas todavía.</li>`}
     </ul>
   </div>`;
 }
@@ -290,10 +357,10 @@ function weightChart() {
 function exList(d) {
   return `<ol class="ex-grid">${d.items.map((i) => `<li class="${i.key ? "key" : ""}"><span class="n">${esc(i.n)}</span>${i.rx ? `<span class="rx">${esc(i.rx)}</span>` : ""}</li>`).join("")}</ol>`;
 }
-function weekStrip(selDay, clickable) {
+function weekStrip(selDay, clickable, R = ROUTINE) {
   const dates = weekDates();
   return `<div class="weekstrip">${[1, 2, 3, 4, 5, 6, 0].map((dow, i) => {
-    const d = ROUTINE[dow];
+    const d = R[dow];
     const done = S.logs.gym.some((l) => l.date === dates[i]);
     const isToday = dow === new Date().getDay();
     return `<button class="wd ${isToday ? "today" : ""} ${selDay === dow ? "sel" : ""}" ${clickable ? `data-act="sel-day" data-day="${dow}"` : `data-act="goto-rutina" data-day="${dow}"`}>
@@ -335,7 +402,6 @@ const VIEWS = {
         ${exList(d)}
         <div class="hero-actions">
           <button class="btn ${doneToday ? "" : "btn-primary"}" data-act="done-today" ${doneToday ? "disabled" : ""}>${doneToday ? "✓ Hecho hoy" : "Marcar como hecho"}</button>
-          <a class="btn" href="#rutina">Registrar con pesos</a>
           <a class="btn btn-ghost" href="${PLAN73}" target="_blank" rel="noopener">Plan-73 ↗</a>
         </div>
       </div>
@@ -377,126 +443,83 @@ const VIEWS = {
   },
 
   rutina() {
-    const d = ROUTINE[selDay];
-    const b = currentBlock();
-    const sessionOpts = [1, 2, 4, 5, 3, 6, 0].map((i) => sessionText(ROUTINE[i])).filter((v, i, a) => a.indexOf(v) === i).concat(["Randori", "Otro"]);
-    const key = d.items.find((i) => i.key);
-    const liftOpts = [...new Set(ROUTINE.flatMap((r) => r.items.filter((i) => i.key).map((i) => i.n)))].concat(["Press de banca", "Peso muerto rumano", "Otro"]).filter((v, i, a) => a.indexOf(v) === i);
-    const gymFields = [
-      { k: "date", label: "Fecha", type: "date", req: true },
-      { k: "session", label: "Sesión", type: "select", options: sessionOpts },
-      { k: "lift", label: "Ejercicio principal", type: "select", options: liftOpts, wide: true },
-      { k: "kg", label: "Kg", type: "number", step: "0.5", ph: "0" },
-      { k: "reps", label: "Series × reps", ph: "4×6" },
-      { k: "rpe", label: "RPE", type: "select", options: ["", "6", "7", "8", "9", "10"] },
-      { k: "notes", label: "Notas", type: "textarea", ph: "Cómo te sentiste, PRs, técnica…" },
-    ];
-    // Mejores marcas por ejercicio principal
-    const prs = {};
-    S.logs.gym.forEach((l) => { if (l.lift && +l.kg && (!prs[l.lift] || +l.kg > prs[l.lift].kg)) prs[l.lift] = { kg: +l.kg, date: l.date, reps: l.reps }; });
-    return `
-    ${head("Rutina / Gym", b ? `${esc(b.title)} · ${esc(b.weeks)}` : "Plan-73: fuerza y potencia para judo −73 kg.",
-      `${syncBadge()}<a class="btn" href="${PLAN73}" target="_blank" rel="noopener">Plan completo ↗</a>`, esc(blockLabel() || "Plan-73"))}
-    <div class="bento"><div class="c-12">${weekStrip(selDay, true)}</div></div>
-    <div class="bento">
-      <div class="card c-8">
-        <div class="card-head">
-          <div><span class="label-sm">${d.name}${d.day === new Date().getDay() ? " · hoy" : ""}</span><h2 style="font-size:22px;margin-top:6px">${sessionName(d)}</h2></div>
-          ${tag(d.tag)}
-        </div>
-        ${d.warm ? `<div class="phase">${esc(d.warm)}</div>` : ""}
+    const cur = currentBlock();
+    const b = shownBlock();
+    // Si estás mirando otro bloque, armo la semana con ese bloque
+    const R = (b && cur && b.id !== cur.id && routineFor(b)) || ROUTINE;
+    const d = R[selDay];
+    let detail = "";
+    if (isLift(d)) {
+      detail = `
+        ${PLAN?.W ? `<div class="phase">${esc(PLAN.W)}</div>` : ""}
         <div class="table-wrap"><table class="ex-table">
           <thead><tr><th>#</th><th>Ejercicio</th><th class="num">Series × reps</th><th>Nota</th></tr></thead>
           <tbody>${d.items.map((i, n) => `<tr class="${i.key ? "key" : ""}"><td>${String(n + 1).padStart(2, "0")}</td><td class="n">${esc(i.n)}${i.key ? ` <span class="tag" style="margin-left:6px">principal</span>` : ""}</td><td class="num rx">${esc(i.rx || "")}</td><td class="note">${esc(i.note || "")}</td></tr>`).join("")}</tbody>
         </table></div>
-        ${d.stretch ? `<div class="phase str">${esc(d.stretch)}</div>` : ""}
-      </div>
-      <div class="card c-4 side">
-        <div class="card-head"><h2>Registrar sesión</h2></div>
-        ${logForm("gym", gymFields, { session: sessionText(d), lift: key ? key.n : liftOpts[0] })}
-      </div>
-    </div>
+        ${PLAN?.SS?.[d.letter] ? `<div class="phase str">${esc(PLAN.SS[d.letter])}</div>` : ""}`;
+    } else if (isSprint(d) && PLAN?.sprints?.[d.letter]) {
+      const sp = PLAN.sprints[d.letter];
+      const stage = STAGE[b.id] ?? 0;
+      detail = `
+        ${PLAN.sprints.warm ? `<div class="plan-html"><h4>${esc(PLAN.sprints.warm.title)}</h4>${PLAN.sprints.warm.html}</div>` : ""}
+        <div class="plan-html sprint" data-stage="${stage}">${sp.html}</div>
+        ${PLAN.sprints.rules ? `<details class="more"><summary>Reglas de los sprints</summary><div class="plan-html">${PLAN.sprints.rules.replace(/^<h4>.*?<\/h4>/, "")}</div></details>` : ""}`;
+    } else if (PLAN?.rest) {
+      detail = `
+        <div class="plan-html"><h4>${esc(PLAN.rest.title)}</h4>${PLAN.rest.html}</div>
+        ${PLAN.rest.passive ? `<div class="plan-html"><h4>${esc(PLAN.rest.passive.title)}</h4>${PLAN.rest.passive.html}</div>` : ""}`;
+    } else {
+      detail = exList(d);
+    }
+    const html = `
+    ${head("Rutina / Gym", PLAN?.updated ? esc(PLAN.updated) : "Plan-73: fuerza y potencia para judo −73 kg.",
+      `${syncBadge()}<a class="btn" href="${PLAN73}" target="_blank" rel="noopener">Abrir Plan-73 ↗</a>`, "Plan-73")}
+    ${PLAN ? `<div class="filters">${PLAN.blocks.map((x) => `<button class="chip ${x.id === b.id ? "on" : ""}" data-act="sel-block" data-block="${x.id}">${esc(x.name)}<span class="muted small mono">${esc(x.weeks)}</span>${x.id === cur.id ? `<span class="dot" style="background:var(--accent)" title="Bloque actual en Plan-73"></span>` : ""}</button>`).join("")}</div>` : ""}
+    <div class="bento"><div class="c-12">${weekStrip(selDay, true, R)}</div></div>
     <div class="bento">
       <div class="card c-8">
-        <div class="card-head"><h2>Historial</h2><span class="sub">${S.logs.gym.length} sesiones</span></div>
-        ${logTable("gym", [
-          { k: "date", label: "Fecha", type: "date" }, { k: "session", label: "Sesión" }, { k: "lift", label: "Principal" },
-          { k: "kg", label: "Kg", num: true }, { k: "reps", label: "Reps", num: true }, { k: "rpe", label: "RPE", num: true }, { k: "notes", label: "Notas" },
-        ], 30)}
+        <div class="card-head">
+          <div><span class="label-sm">${d.name}${d.day === new Date().getDay() ? " · hoy" : ""}</span><h2 style="font-size:22px;margin-top:6px">${sessionName(d)}</h2>${d.sub ? `<div class="muted" style="margin-top:4px">${esc(d.sub)}</div>` : ""}</div>
+          ${tag(d.tag)}
+        </div>
+        ${detail}
       </div>
       <div class="c-4 side stack">
-        <div class="card">
-          <div class="card-head"><h2>Mejores marcas</h2></div>
-          ${Object.keys(prs).length ? `<table><tbody>${Object.entries(prs).map(([n, p]) => `<tr><td>${esc(n)}</td><td class="num rx">${p.kg} kg</td><td class="num small muted">${fmtDate(p.date)}</td></tr>`).join("")}</tbody></table>` : `<p class="empty">Registrá sesiones con kg y aparecen tus récords acá.</p>`}
-        </div>
-        <div class="card">
-          <div class="card-head"><h2>Inicio del plan</h2></div>
-          <form class="inline" data-form="planstart">
-            <input name="start" type="date" value="${esc(S.planStart || "")}" aria-label="Fecha de inicio del plan" />
-            <button class="btn">Guardar</button>
-          </form>
-          <p class="small muted" style="margin:10px 0 0">${S.planStart ? `Vas por la semana ${planWeek() || "—"}. El bloque cambia solo.` : "Con la fecha de inicio el HQ calcula solo la semana y el bloque. Sin fecha, usa el último bloque que abriste en Plan-73."}</p>
-        </div>
+        ${b ? `<div class="card"><span class="label-sm">${esc(b.name)} · ${esc(b.weeks)}</span><h2 style="margin:6px 0 8px">${esc(b.title)}</h2><p class="muted" style="margin:0">${esc(b.intro || "")}</p></div>` : ""}
+        ${PLAN?.rules ? `<div class="card"><div class="card-head"><h2>La semana</h2></div><div class="plan-html">${PLAN.rules}</div></div>` : ""}
+        ${notesCard("rutina")}
       </div>
     </div>`;
+    return html;
   },
 
   judo() {
     const q = JUDO_QUOTES[quoteIdx];
-    const month = thisMonth(S.logs.judo);
     const all = WAZA_GROUPS.flatMap((g) => g.items);
     const dom = all.filter((n) => S.waza[n] === 2).length;
     const learn = all.filter((n) => S.waza[n] === 1).length;
-    const judoFields = [
-      { k: "date", label: "Fecha", type: "date", req: true },
-      { k: "pillar", label: "Pilar", type: "select", options: PILLARS.map((p) => [p.id, p.name]) },
-      { k: "type", label: "Tipo", type: "select", options: ["Clase", "Randori", "Uchikomi / Nagekomi", "Ne-waza", "Kata", "Competencia", "Enseñar", "Evento del dojo", "Otro"] },
-      { k: "min", label: "Minutos", type: "number", ph: "90" },
-      { k: "notes", label: "Qué trabajé / qué mejorar", type: "textarea" },
-    ];
     return `
-    ${head("Judo", "Judo completo, como lo pensaron Kano y el Kodokan: salud, deporte, comunidad y defensa personal.", "", "柔道 · el camino de la suavidad")}
-    <div class="bento">
-      ${PILLARS.map((p) => {
-        const ent = month.filter((l) => (l.pillar || "deporte") === p.id);
-        return `<div class="card pillar c-3"><span class="jp">${p.jp}</span><h3>${p.name}</h3><p>${p.desc}</p>
-          <div class="cnt"><span><b>${ent.length}</b>este mes</span><span><b>${ent.reduce((a, l) => a + (+l.min || 0), 0)}</b>minutos</span></div></div>`;
-      }).join("")}
-    </div>
-    <div class="bento">
-      <div class="card quote-card c-8">
-        <div class="card-head" style="margin:0"><span class="label-sm">Frase del día · ${quoteIdx + 1}/${JUDO_QUOTES.length}</span><button class="btn btn-sm btn-ghost" data-act="next-quote">Otra →</button></div>
-        <blockquote>${esc(q[0])}</blockquote>
-        <span class="src">${esc(q[1])}</span>
-      </div>
-      <div class="c-4 side kpis">
-        <div class="kpi"><span class="label-sm">Dominadas</span><div class="v">${dom}<small>/ 100</small></div><div class="bar"><i style="width:${dom}%"></i></div></div>
-        <div class="kpi"><span class="label-sm">Aprendiendo</span><div class="v">${learn}</div><div class="d">técnicas</div></div>
+    <div class="judo-hero">
+      <div class="jh-kanji" aria-hidden="true">柔道</div>
+      <div>
+        <div class="kicker">Jūdō · el camino de la suavidad</div>
+        <blockquote class="jh-quote">${esc(q[0])}</blockquote>
+        <div class="jh-src"><span>${esc(q[1])}</span><button class="btn btn-sm btn-ghost" data-act="next-quote">Otra frase →</button></div>
       </div>
     </div>
-    <div class="bento">
-      <div class="card c-4 side">
-        <div class="card-head"><h2>Registrar entreno</h2></div>
-        ${logForm("judo", judoFields)}
-      </div>
-      <div class="card c-8">
-        <div class="card-head"><h2>Diario</h2><span class="sub">${S.logs.judo.length} registros</span></div>
-        ${logTable("judo", [
-          { k: "date", label: "Fecha", type: "date" },
-          { k: "pillar", label: "Pilar", render: (r) => esc((PILLARS.find((p) => p.id === r.pillar) || { name: "—" }).name) },
-          { k: "type", label: "Tipo" }, { k: "min", label: "Min", num: true },
-          { k: "notes", label: "Notas", render: (r) => esc(r.notes || [r.tech, r.notes].filter(Boolean).join(" · ")) },
-        ], 20)}
-      </div>
+    <div class="pillars-line">
+      ${PILLARS.map((p) => `<div class="pl-item"><span class="kj" lang="ja">${p.kanji}</span><span class="rm">${p.romaji}</span><b>${p.name}</b><span class="gl">${p.glyphs}</span><span class="ex">${p.short}</span></div>`).join("")}
     </div>
-    <div class="bento">
-      <div class="card c-12">
-        <div class="card-head"><div><h2>Las 100 técnicas del Kodokan</h2><span class="small muted">68 nage-waza + 32 katame-waza. Tocá el estado para marcar tu progreso.</span></div></div>
-        <div class="filters" id="waza-filters">${wazaFilters()}</div>
-        <div id="waza-list">${wazaList()}</div>
-        <p class="small muted" style="margin:18px 0 0">Cinturones según el Gokyo (un grupo por cinturón). El programa exacto puede cambiar según tu dojo o federación.</p>
+    <div class="card" style="margin-top:28px">
+      <div class="card-head">
+        <div><h2>Las 100 técnicas del Kodokan</h2><span class="small muted">68 nage-waza + 32 katame-waza. Tocá el estado para marcar tu progreso.</span></div>
+        <div class="waza-total"><span><b>${dom}</b> dominadas</span><span><b>${learn}</b> aprendiendo</span><div class="progress" style="width:140px"><div style="width:${dom}%"></div></div></div>
       </div>
-    </div>`;
+      <div class="filters" id="waza-filters">${wazaFilters()}</div>
+      <div id="waza-list">${wazaList()}</div>
+      <p class="small muted" style="margin:18px 0 0">Cinturones según el Gokyo (un grupo por cinturón). El programa exacto puede cambiar según tu dojo o federación.</p>
+    </div>
+    <div class="bento" style="margin-top:16px">${notesCard("judo", "Notas de judo", "c-12")}</div>`;
   },
 
   fisico() {
@@ -532,6 +555,7 @@ const VIEWS = {
           </form>
         </div>
         ${tasksCard("fisico")}
+        ${notesCard("fisico")}
       </div>
     </div>
     <div class="bento">
@@ -545,31 +569,11 @@ const VIEWS = {
   },
 
   surf() {
-    const ses = S.logs.surf;
-    const avg = ses.length ? (ses.reduce((a, s) => a + (+s.rating || 0), 0) / ses.length).toFixed(1) : "—";
-    const f = [
-      { k: "date", label: "Fecha", type: "date", req: true },
-      { k: "spot", label: "Spot", ph: "La Paloma" },
-      { k: "waves", label: "Olas (m)", ph: "1.2" },
-      { k: "min", label: "Minutos", type: "number", ph: "90" },
-      { k: "rating", label: "Rating", type: "select", options: ["5", "4", "3", "2", "1"] },
-      { k: "notes", label: "Notas", type: "textarea" },
-    ];
     return `
-    ${head("Surf", "Sesiones, spots y condiciones.")}
-    <div class="kpis row4" style="margin-bottom:16px">
-      <div class="kpi"><span class="label-sm">Sesiones</span><div class="v">${ses.length}</div></div>
-      <div class="kpi"><span class="label-sm">Este mes</span><div class="v">${thisMonth(ses).length}</div></div>
-      <div class="kpi"><span class="label-sm">En el agua</span><div class="v">${Math.round(ses.reduce((a, s) => a + (+s.min || 0), 0) / 6) / 10}<small>h</small></div></div>
-      <div class="kpi"><span class="label-sm">Rating medio</span><div class="v">${avg}<small>/ 5</small></div></div>
-    </div>
-    <div class="bento">
-      <div class="card c-4 side"><div class="card-head"><h2>Nueva sesión</h2></div>${logForm("surf", f)}</div>
-      <div class="card c-8"><div class="card-head"><h2>Diario</h2></div>${logTable("surf", f.map((x) => x.k === "min" || x.k === "rating" ? { ...x, num: true } : x))}</div>
-    </div>
+    ${head("Surf", "Spots y notas.")}
     <div class="bento">
       ${checklist("spots", "Spots (✓ = ya surfeado)", "Ej: Los Dedos", "c-6")}
-      ${tasksCard("surf", "Pendientes", "c-6")}
+      ${notesCard("surf", "Notas de surf", "c-6")}
     </div>`;
   },
 
@@ -577,12 +581,9 @@ const VIEWS = {
     return `
     ${head("Estilo de vida", "Lugares, planes, mate, playa y todo lo que hace a la vida en Uruguay.", "", "Uruguay")}
     <div class="bento">
-      ${checklist("places", "Lugares y planes", "Ej: Cabo Polonio en invierno", "c-6")}
-      ${tasksCard("uruguay", "Pendientes", "c-6")}
-      <div class="card c-12">
-        <div class="card-head"><h2>Notas libres</h2><span class="sub" id="uy-saved">se guarda solo</span></div>
-        <textarea id="uy-notes" style="min-height:220px" placeholder="Hábitos, rutina de mañana, comidas, lo que quieras…">${esc(S.uyNotes)}</textarea>
-      </div>
+      ${checklist("places", "Lugares y planes", "Ej: Cabo Polonio en invierno", "c-4")}
+      ${tasksCard("uruguay", "Pendientes", "c-4")}
+      ${notesCard("uruguay", "Notas", "c-4")}
     </div>`;
   },
 
@@ -612,7 +613,8 @@ const VIEWS = {
             <button class="del" data-act="del-study" data-id="${s.id}">✕</button></li>`).join("") || `<li class="empty" style="background:none">Sin pendientes de estudio.</li>`}
         </ul>
       </div>
-    </div>`;
+    </div>
+    <div class="bento">${notesCard("estudio", "Notas", "c-12")}</div>`;
   },
 
   proyectos() {
@@ -650,6 +652,7 @@ const VIEWS = {
           <button class="btn btn-primary">Crear</button>
         </form>
       </div>
+      ${notesCard("proyectos", "Notas", "c-4")}
     </div>`;
   },
 
@@ -674,7 +677,8 @@ const VIEWS = {
               <button class="del" data-act="del-content" data-id="${c.id}">✕</button></span></div></div>`).join("")}
         </div>`;
       }).join("")}
-    </div>`;
+    </div>
+    <div class="bento" style="margin-top:16px">${notesCard("contenido", "Notas", "c-12")}</div>`;
   },
 
   ideas() {
@@ -784,6 +788,7 @@ document.addEventListener("submit", (e) => {
     case "planstart": S.planStart = v.start || null; buildRoutine(); updateSplash(); break;
     case "study": S.study.push({ id: uid(), ...v, done: false }); break;
     case "idea": addIdea(v.text, v.tag); break;
+    case "note": (S.notes[f.dataset.key] = S.notes[f.dataset.key] || []).unshift({ id: uid(), text: v.text, date: today() }); break;
     case "content": S.content.push({ id: uid(), title: v.title, cat: v.cat, stage: 0 }); break;
     case "project": S.projects.push({ id: uid(), status: "Activo", tasks: [], ...v }); break;
     case "ptask": S.projects.find((p) => p.id === f.dataset.pid).tasks.push({ id: uid(), text: v.text, done: false }); break;
@@ -818,6 +823,8 @@ function act(el) {
     case "del-proj": if (!confirm("¿Borrar este proyecto?")) return; S.projects = drop(S.projects); break;
     case "toggle-ptask": S.projects.find((p) => p.id === pid).tasks.find((t) => t.id === id).done = el.checked; break;
     case "del-ptask": { const p = S.projects.find((p) => p.id === pid); p.tasks = p.tasks.filter((t) => t.id !== id); break; }
+    case "sel-block": viewBlock = el.dataset.block; render(); return;
+    case "del-note": S.notes[key] = (S.notes[key] || []).filter((x) => x.id !== id); break;
     case "next-quote": quoteIdx = (quoteIdx + 1 + Math.floor(Math.random() * (JUDO_QUOTES.length - 1))) % JUDO_QUOTES.length; render(); return;
     case "waza-belt": wazaF.belt = el.dataset.belt; $("#waza-filters").innerHTML = wazaFilters(); refreshWaza(); return;
     case "waza-status": {
@@ -881,10 +888,6 @@ function tryPlay(n = 25) {
   if (embedCtl) embedCtl.play();
   if (n > 0) setTimeout(() => tryPlay(n - 1), 1200);
 }
-function setPlayerHidden(h) { document.body.classList.toggle("pl-hidden", h); lsSet("manuhq-pl-hidden", h ? "1" : ""); }
-$("#pl-min").addEventListener("click", () => setPlayerHidden(true));
-$("#pl-restore").addEventListener("click", () => setPlayerHidden(false));
-if (lsGet("manuhq-pl-hidden")) setPlayerHidden(true);
 
 function initMusic() {
   window.onSpotifyIframeApiReady = (IFrameAPI) => {
@@ -894,8 +897,6 @@ function initMusic() {
       ctrl.addListener("playback_update", (e) => {
         const playing = !e.data.isPaused; isPlaying = playing;
         if (playing) wantPlay = false;   // ya arrancó: no volver a forzar el play si después pausás
-        $("#pl-restore").classList.toggle("playing", playing);
-        $("#player").classList.toggle("playing", playing);
       });
     });
   };
