@@ -16,7 +16,6 @@ const today = () => iso(new Date());
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmtDate = (d) => d ? new Date(d + "T12:00:00").toLocaleDateString("es-UY", { day: "numeric", month: "short" }) : "";
-const thisMonth = (arr) => arr.filter((x) => x.date && x.date.slice(0, 7) === today().slice(0, 7));
 const lsGet = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* sin storage */ } };
 const lsDel = (k) => { try { localStorage.removeItem(k); } catch (e) { /* sin storage */ } };
@@ -66,10 +65,9 @@ const DEFAULT_STATE = {
     { id: uid(), text: "Grabar primer video de judo", area: "judo", done: false },
     { id: uid(), text: "Foto de progreso inicial (frente/lado/espalda)", area: "fisico", done: false },
   ],
-  logs: { gym: [], judo: [], surf: [] },
+  logs: { gym: [] },          // días marcados como hechos en Inicio
   weights: [],
   goals: { weight: 73, walking: 75.5 },
-  planStart: null,
   projects: [
     { id: uid(), name: "eventospde.com", status: "Activo", desc: "Mi empresa de eventos. Web, clientes y crecimiento.", url: "https://eventospde.com", repo: "https://github.com/Manu-Alz/eventos-pde", tasks: [{ id: uid(), text: "Definir próximas mejoras de la web", done: false }] },
     { id: uid(), name: "Plan-73", status: "Activo", desc: "Mi rutina de fuerza y potencia para judo (−73 kg).", url: PLAN73, repo: "https://github.com/Manu-Alz/Plan-73", tasks: [] },
@@ -84,27 +82,30 @@ const DEFAULT_STATE = {
   waza: {},
   spots: [{ id: uid(), text: "La Paloma", done: false }, { id: uid(), text: "Punta del Diablo", done: false }, { id: uid(), text: "Playa Brava", done: false }],
   places: [],
-  uyNotes: "",
   notes: {},
   langs: [],
 };
 
+/* Completa datos viejos o importados con lo que falte */
+function normalize(data) {
+  const s = { ...structuredClone(DEFAULT_STATE), ...data };
+  s.logs = { ...DEFAULT_STATE.logs, ...s.logs };
+  for (const k of ["waza", "notes"]) s[k] = s[k] || {};
+  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "places", "langs"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
+  // Las notas libres viejas de Uruguay pasan a la lista de notas (una sola vez)
+  if (s.uyNotes) { (s.notes.uruguay = s.notes.uruguay || []).unshift({ id: uid(), text: s.uyNotes, date: today() }); }
+  delete s.uyNotes; delete s.planStart;
+  return s;
+}
 let S = load();
 function load() {
   try {
     const raw = lsGet(STORE_KEY);
-    if (raw) {
-      const s = { ...structuredClone(DEFAULT_STATE), ...JSON.parse(raw) };
-      s.logs = { ...DEFAULT_STATE.logs, ...s.logs };
-      s.waza = s.waza || {};
-      s.notes = s.notes || {};
-      s.langs = s.langs || [];
-      if (s.uyNotes && !(s.notes.uruguay || []).length) s.notes.uruguay = [{ id: uid(), text: s.uyNotes, date: today() }];
-      return s;
-    }
+    if (raw) { const s = normalize(JSON.parse(raw)); lsSet(STORE_KEY, JSON.stringify(s)); return s; }
   } catch (e) { /* datos corruptos: arranco limpio */ }
   return structuredClone(DEFAULT_STATE);
 }
+lsDel("manuhq-plan73");   // caché vieja del lector de Plan-73
 function save() { lsSet(STORE_KEY, JSON.stringify(S)); }
 function commit() { save(); render(); }
 
@@ -113,15 +114,8 @@ function commit() { save(); render(); }
    ========================================================= */
 const DAY_NAMES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
 const DAY_SHORT = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
-let ROUTINE = [
-  { letter: "—", title: "Descanso + estiramiento largo", tag: "estiramientos", items: [{ n: "Estiramiento largo", rx: "30–60 min" }] },
-  { letter: "A", title: "Fuerza máxima, piernas", tag: "gym", items: [{ n: "Sentadilla trasera", key: true }, { n: "Peso muerto rumano" }, { n: "Sentadilla búlgara" }, { n: "Curl nórdico" }] },
-  { letter: "B", title: "Fuerza máxima, tren superior", tag: "gym", items: [{ n: "Dominadas con lastre", key: true }, { n: "Press de banca" }, { n: "Remo con barra" }, { n: "Press militar de pie" }] },
-  { letter: "S", title: "Sprints + movilidad", tag: "fisico", items: [{ n: "Sprints de 20 s" }, { n: "Movilidad" }] },
-  { letter: "C", title: "Potencia de judo: cadera y piernas", tag: "judo", items: [{ n: "Peso muerto con barra hexagonal", key: true }, { n: "Uchikomi con banda elástica" }] },
-  { letter: "D", title: "Tirón, agarre y volumen", tag: "gym", items: [{ n: "Dominadas agarrado del judogi", key: true }, { n: "Remo con pecho apoyado" }] },
-  { letter: "S", title: "Sprints (o randori fuerte)", tag: "fisico", items: [{ n: "Sprints de 20 s" }, { n: "o randori fuerte" }] },
-].map((d, i) => ({ ...d, day: i, name: DAY_NAMES[i] }));
+/* Hasta que llega Plan-73 (primera vez, sin caché) no se inventa nada */
+let ROUTINE = DAY_NAMES.map((name, day) => ({ day, name, letter: "·", title: "Cargando Plan-73…", sub: "", tag: "gym", items: [] }));
 let PLAN = null;
 let planStatus = "offline";
 let viewBlock = null;      // bloque que estás mirando en Rutina (por defecto, el actual de Plan-73)
@@ -198,7 +192,7 @@ async function loadPlan73() {
     // Los bloques están como JS en mi propia página de Plan-73: tomo esa parte del script y la evalúo.
     const src = [...doc.scripts].map((s) => s.textContent).find((t) => t.includes("const blocks"));
     const code = src.slice(0, src.indexOf("const tabs"));
-    const v = new Function(code + ";return {blocks, W: typeof W!=='undefined'?W:null, SS: typeof SS!=='undefined'?SS:null, SUB: typeof SUB!=='undefined'?SUB:null};")();
+    const v = new Function(code + ";return {blocks, W: typeof W!=='undefined'?W:null, SS: typeof SS!=='undefined'?SS:null};")();
     // Sprints: un panel por día (S1, S2) + calentamiento + reglas
     const sp = doc.querySelector("#sprints");
     const sprints = {};
@@ -228,7 +222,7 @@ async function loadPlan73() {
     }
     const updated = doc.querySelector("footer")?.textContent.trim() || "";
     PLAN = {
-      week, rules: rules ? clean(rules) : "", W: v.W, SS: v.SS, SUB: v.SUB, sprints, rest, updated,
+      week, rules: rules ? clean(rules) : "", W: v.W, SS: v.SS, sprints, rest, updated,
       blocks: v.blocks.map(({ id, name, weeks, title, intro, s }) => ({ id, name, weeks, title, intro, s })),
     };
     planStatus = "live";
@@ -238,7 +232,10 @@ async function loadPlan73() {
     console.warn("No pude leer Plan-73; uso la versión guardada.", e);
   }
   updateSplash();
-  render();
+  // Redibujo solo si la vista usa el plan y no estás escribiendo algo (para no borrarte el texto)
+  const typing = document.activeElement?.matches("input, textarea, select");
+  if (["inicio", "rutina"].includes(route()) && !typing) render();
+  else $("#top-sync").innerHTML = syncBadge();
 }
 const isLift = (d) => /^[A-D]$/.test(d.letter);
 const isSprint = (d) => /^S/.test(d.letter);
@@ -312,25 +309,12 @@ function checklist(key, title, placeholder, cls = "") {
   </div>`;
 }
 
-/* Registro genérico: formulario en grilla + tabla */
+/* Campo de formulario con etiqueta */
 function fieldHTML(f, val) {
   const v = val ?? (f.type === "date" ? today() : "");
   if (f.type === "select") return `<label class="field ${f.wide ? "wide" : ""}"><span>${f.label}</span><select name="${f.k}">${f.options.map((o) => { const [ov, ol] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(ov)}" ${ov === v ? "selected" : ""}>${esc(ol)}</option>`; }).join("")}</select></label>`;
   if (f.type === "textarea") return `<label class="field wide"><span>${f.label}</span><textarea name="${f.k}" placeholder="${f.ph || ""}">${esc(v)}</textarea></label>`;
   return `<label class="field ${f.wide ? "wide" : ""}"><span>${f.label}</span><input name="${f.k}" type="${f.type || "text"}" value="${esc(v)}" placeholder="${f.ph || ""}" ${f.step ? `step="${f.step}"` : ""} ${f.req ? "required" : ""} /></label>`;
-}
-function logForm(key, fields, values = {}, btn = "Guardar") {
-  return `<form class="form-grid" data-form="log" data-key="${key}">${fields.map((f) => fieldHTML(f, values[f.k])).join("")}
-    <div class="wide"><button class="btn btn-primary">${btn}</button></div></form>`;
-}
-function logTable(key, fields, limit = 50) {
-  const rows = [...S.logs[key]].sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, limit);
-  const cell = (f, r) => f.type === "date" ? fmtDate(r[f.k]) : f.render ? f.render(r) : esc(r[f.k]);
-  return `<div class="table-wrap"><table>
-    <thead><tr>${fields.map((f) => `<th class="${f.num ? "num" : ""}">${f.label}</th>`).join("")}<th></th></tr></thead>
-    <tbody>${rows.map((r) => `<tr>${fields.map((f) => `<td class="${f.num ? "num" : ""}">${cell(f, r)}</td>`).join("")}<td><button class="del" data-act="del-log" data-key="${key}" data-id="${r.id}">✕</button></td></tr>`).join("")
-      || `<tr><td colspan="${fields.length + 1}" class="empty">Todavía no hay registros.</td></tr>`}</tbody>
-  </table></div>`;
 }
 
 function weightChart() {
@@ -406,6 +390,9 @@ const VIEWS = {
     const hi = hour < 6 ? "Buenas noches" : hour < 12 ? "Buen día" : hour < 20 ? "Buenas tardes" : "Buenas noches";
     const dates = weekDates();
     const gymWeek = new Set(S.logs.gym.filter((l) => dates.includes(l.date)).map((l) => l.date)).size;
+    const trainDays = ROUTINE.filter((r) => isLift(r) || isSprint(r)).length || 6;
+    const dom = Object.values(S.waza).filter((v) => v === 2).length;
+    const bestLang = S.langs.map((l) => ({ l, n: streakOf(l.days) })).sort((a, b) => b.n - a.n)[0];
     const active = S.projects.filter((p) => p.status === "Activo");
     const study = S.study.filter((s) => !s.done).sort((a, b) => (a.due || "9").localeCompare(b.due || "9")).slice(0, 4);
     const startKg = ws[0]?.kg;
@@ -414,21 +401,22 @@ const VIEWS = {
     ${head(`${hi}, Manu`, "Esto es lo que tenés hoy.", "", new Date().toLocaleDateString("es-UY", { weekday: "long", day: "numeric", month: "long" }))}
     <div class="bento">
       <div class="card hero c-8">
-        <div class="card-head" style="margin-bottom:0"><span class="label-sm" style="color:var(--accent)">Hoy toca</span>${syncBadge()}</div>
+        <div class="card-head" style="margin-bottom:0"><span class="label-sm" style="color:var(--accent)">Hoy toca</span>${tag(d.tag)}</div>
         <h2>${sessionName(d)}</h2>
-        <div class="meta">${d.sub ? `<span class="muted">${esc(d.sub)}</span>` : ""}${tag(d.tag)}<span class="sub mono small muted">${esc(blockLabel())}</span></div>
+        <div class="meta">${d.sub ? `<span class="muted">${esc(d.sub)}</span>` : ""}<span class="sub mono small muted">${esc(blockLabel())}</span></div>
         ${exList(d)}
         <div class="hero-actions">
-          <button class="btn ${doneToday ? "" : "btn-primary"}" data-act="done-today" ${doneToday ? "disabled" : ""}>${doneToday ? "✓ Hecho hoy" : "Marcar como hecho"}</button>
+          ${d.items.length ? `<button class="btn ${doneToday ? "btn-done" : "btn-primary"}" data-act="done-today" title="${doneToday ? "Tocá para deshacer" : ""}">${doneToday ? "✓ Hecho hoy" : "Marcar como hecho"}</button>` : ""}
+          <a class="btn" href="#rutina">Ver detalle</a>
           <a class="btn btn-ghost" href="${PLAN73}" target="_blank" rel="noopener">Plan-73 ↗</a>
         </div>
       </div>
       <div class="c-4 side stack">
         <div class="kpis">
-          <div class="kpi"><span class="label-sm">Peso</span><div class="v">${lastW ? lastW.kg : "—"}<small>kg</small></div><div class="d">meta ${S.goals.walking} caminando</div><div class="bar"><i style="width:${pct}%"></i></div></div>
-          <div class="kpi"><span class="label-sm">Gym semana</span><div class="v">${gymWeek}<small>/ 4</small></div><div class="d">sesiones A–D</div><div class="bar"><i style="width:${Math.min(100, gymWeek * 25)}%"></i></div></div>
-          <div class="kpi"><span class="label-sm">Judo</span><div class="v">${thisMonth(S.logs.judo).length}</div><div class="d">entrenos este mes</div></div>
-          <div class="kpi"><span class="label-sm">Surf</span><div class="v">${thisMonth(S.logs.surf).length}</div><div class="d">sesiones este mes</div></div>
+          <a class="kpi" href="#fisico"><span class="label-sm">Peso</span><div class="v">${lastW ? lastW.kg : "—"}<small>kg</small></div><div class="d">meta ${S.goals.walking} caminando</div><div class="bar"><i style="width:${pct}%"></i></div></a>
+          <a class="kpi" href="#rutina"><span class="label-sm">Semana</span><div class="v">${gymWeek}<small>/ ${trainDays}</small></div><div class="d">días de entreno hechos</div><div class="bar"><i style="width:${Math.min(100, (gymWeek / trainDays) * 100)}%"></i></div></a>
+          <a class="kpi" href="#judo"><span class="label-sm">Técnicas</span><div class="v">${dom}<small>/ 100</small></div><div class="d">dominadas</div><div class="bar"><i style="width:${dom}%"></i></div></a>
+          <a class="kpi" href="#idiomas"><span class="label-sm">Idiomas</span><div class="v">${bestLang ? bestLang.n : "—"}${bestLang ? "<small>días</small>" : ""}</div><div class="d">${bestLang ? `racha en ${esc(bestLang.l.name)}` : "agregá un idioma"}</div></a>
         </div>
         <div class="card quote-card">
           <span class="label-sm">Judo · frase</span>
@@ -826,17 +814,20 @@ function route() { const r = location.hash.slice(1); return VIEWS[r] ? r : "inic
 function renderNav() {
   const cur = route();
   $("#nav").innerHTML = NAV.map((g) => `${g.group ? `<div class="nav-group">${g.group}</div>` : ""}${g.items.map(([id, label]) =>
-    `<a href="#${id}" class="${id === cur ? "active" : ""}"><span class="ni"><svg viewBox="0 0 24 24"><path d="${ICONS[id]}"/></svg></span>${label}</a>`).join("")}`).join("");
+    `<a href="#${id}" class="${id === cur ? "active" : ""}" ${id === cur ? 'aria-current="page"' : ""}><span class="ni"><svg viewBox="0 0 24 24"><path d="${ICONS[id]}"/></svg></span>${label}</a>`).join("")}`).join("");
 }
+const routeLabel = (r) => NAV.flatMap((g) => g.items).find(([id]) => id === r)?.[1] || "Inicio";
 function render() {
   renderNav();
   $("#view").innerHTML = VIEWS[route()]();
   $("#top-sync").innerHTML = syncBadge();
+  document.title = route() === "inicio" ? "Manu HQ" : `${routeLabel(route())} · Manu HQ`;
 }
 window.addEventListener("hashchange", () => {
   if (route() === "rutina" && !render.keepDay) selDay = new Date().getDay();
   render.keepDay = false;
   render(); window.scrollTo(0, 0); $("#sidebar").classList.remove("open");
+  const v = $("#view"); v.style.animation = "none"; void v.offsetWidth; v.style.animation = "";   // transición suave entre secciones
 });
 
 /* =========================================================
@@ -862,10 +853,8 @@ document.addEventListener("submit", (e) => {
   switch (kind) {
     case "task": S.tasks.unshift({ id: uid(), text: v.text, area: f.dataset.area || v.area, done: false }); break;
     case "check": S[f.dataset.key].push({ id: uid(), text: v.text, done: false }); break;
-    case "log": S.logs[f.dataset.key].push({ id: uid(), ...v }); toast("Guardado ✓"); break;
     case "weight": S.weights.push({ id: uid(), date: v.date || today(), kg: +v.kg, note: v.note }); break;
     case "goals": S.goals = { weight: +v.weight, walking: +v.walking }; break;
-    case "planstart": S.planStart = v.start || null; buildRoutine(); updateSplash(); break;
     case "study": S.study.push({ id: uid(), ...v, done: false }); break;
     case "idea": addIdea(v.text, v.tag); break;
     case "lang": { const l = { id: uid(), name: v.name.trim(), level: "A1", goal: "B2", days: [], vocab: [], res: [] }; S.langs.push(l); selLang = l.id; break; }
@@ -879,7 +868,7 @@ document.addEventListener("submit", (e) => {
   commit();
   const sel = `form[data-form="${kind}"]${f.dataset.key ? `[data-key="${f.dataset.key}"]` : ""}${f.dataset.pid ? `[data-pid="${f.dataset.pid}"]` : ""} input:not([type=date])`;
   const again = document.querySelector(sel);
-  if (again && kind !== "log") again.focus();
+  if (again) again.focus();
 });
 
 function act(el) {
@@ -891,9 +880,11 @@ function act(el) {
     case "del-task": S.tasks = drop(S.tasks); break;
     case "toggle-check": byId(S[key]).done = el.checked; break;
     case "del-check": S[key] = drop(S[key]); break;
-    case "del-log": S.logs[key] = drop(S.logs[key]); break;
     case "del-weight": S.weights = drop(S.weights); break;
-    case "done-today": S.logs.gym.push({ id: uid(), date: today(), session: sessionText(ROUTINE[new Date().getDay()]), notes: "" }); toast("Sesión registrada ✓"); break;
+    case "done-today":
+      if (S.logs.gym.some((l) => l.date === today())) S.logs.gym = S.logs.gym.filter((l) => l.date !== today());
+      else { S.logs.gym.push({ id: uid(), date: today(), session: sessionText(ROUTINE[new Date().getDay()]) }); toast("Día marcado ✓"); }
+      break;
     case "sel-day": selDay = +el.dataset.day; render(); return;
     case "goto-rutina": selDay = +el.dataset.day; render.keepDay = true; location.hash = "rutina"; return;
     case "toggle-study": byId(S.study).done = el.checked; break;
@@ -935,14 +926,13 @@ document.addEventListener("change", (e) => {
   const wf = e.target.dataset?.wf;
   if (wf && wf !== "q") { wazaF[wf] = e.target.value; refreshWaza(); }
 });
-let uyTimer;
 document.addEventListener("input", (e) => {
   if (e.target.dataset?.wf === "q") { wazaF.q = e.target.value; refreshWaza(); return; }
-  if (e.target.id === "vocab-q") { vocabQ = e.target.value; const L = S.langs.find((l) => l.id === selLang) || S.langs[0]; const q = vocabQ.trim().toLowerCase(); $("#vocab-list").innerHTML = vocabHTML(L, L.vocab.filter((v) => !q || (v.w + " " + v.m).toLowerCase().includes(q))); return; }
-  if (e.target.id !== "uy-notes") return;
-  S.uyNotes = e.target.value;
-  clearTimeout(uyTimer);
-  uyTimer = setTimeout(() => { save(); const s = $("#uy-saved"); if (s) s.textContent = "guardado ✓"; }, 400);
+  if (e.target.id === "vocab-q") {
+    vocabQ = e.target.value;
+    const L = langById(selLang) || S.langs[0]; const q = vocabQ.trim().toLowerCase();
+    $("#vocab-list").innerHTML = vocabHTML(L, L.vocab.filter((v) => !q || (v.w + " " + v.m).toLowerCase().includes(q)));
+  }
 });
 
 /* Export / import */
@@ -957,8 +947,8 @@ $("#import-file").addEventListener("change", async (e) => {
   try {
     const data = JSON.parse(await file.text());
     if (!confirm("Esto reemplaza los datos actuales de este navegador. ¿Seguir?")) return;
-    S = { ...structuredClone(DEFAULT_STATE), ...data }; S.logs = { ...DEFAULT_STATE.logs, ...S.logs };
-    commit();
+    S = normalize(data);
+    commit(); toast("Datos importados ✓");
   } catch { alert("Ese archivo no es un backup válido."); }
   e.target.value = "";
 });
@@ -994,12 +984,6 @@ function initMusic() {
   const s = document.createElement("script"); s.src = "https://open.spotify.com/embed/iframe-api/v1"; s.async = true; document.head.appendChild(s);
 }
 
-/* Atajo: barra espaciadora = play/pausa (si no estás escribiendo) */
-document.addEventListener("keydown", (e) => {
-  if (e.code !== "Space" || !entered || /INPUT|TEXTAREA|SELECT|BUTTON/.test(document.activeElement.tagName)) return;
-  e.preventDefault();
-  if (embedCtl) embedCtl.togglePlay();
-});
 
 /* =========================================================
    Pantalla de entrada
