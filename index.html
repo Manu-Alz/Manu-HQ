@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Manu HQ</title>
+  <meta name="description" content="Mi hub personal: entreno, judo, surf, proyectos, estudio e ideas." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>" />
+</head>
+<body>
+  <!-- Pantalla de entrada: el clic permite arrancar la música -->
+  <div id="splash">
+    <div class="splash-inner">
+      <div class="splash-logo">MANU<span>HQ</span></div>
+      <p class="splash-sub" id="splash-date"></p>
+      <button id="enter-btn" class="btn btn-primary btn-lg">Entrar ▶</button>
+      <button id="enter-silent" class="btn btn-ghost">Entrar sin música</button>
+    </div>
+  </div>
+
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">MANU<span>HQ</span></div>
+      <nav id="nav"></nav>
+      <div class="sidebar-foot">
+        <button class="btn btn-ghost btn-sm" id="export-btn">⬇ Exportar datos</button>
+        <label class="btn btn-ghost btn-sm">⬆ Importar
+          <input type="file" id="import-file" accept="application/json" hidden />
+        </label>
+      </div>
+    </aside>
+
+    <header class="topbar">
+      <button class="icon-btn" id="menu-btn" aria-label="Menú">☰</button>
+      <div class="brand">MANU<span>HQ</span></div>
+      <button class="icon-btn" id="music-toggle-m" aria-label="Música">♫</button>
+    </header>
+
+    <main id="view"></main>
+  </div>
+
+  <!-- Reproductor de Spotify flotante -->
+  <div id="player" class="player collapsed">
+    <div class="player-bar">
+      <span>♫ Mi playlist</span>
+      <button class="icon-btn" id="music-toggle" aria-label="Mostrar u ocultar reproductor">▾</button>
+    </div>
+    <div id="spotify-embed"></div>
+  </div>
+
+  <script src="https://open.spotify.com/embed/iframe-api/v1" async></script>
+  <script src="app.js"></script>
+</body>
+</html>
