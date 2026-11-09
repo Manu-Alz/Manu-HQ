@@ -149,6 +149,40 @@ function clean(node) {
 const cellLines = (td) => clean(td).split(/<br>/).map((s) => s.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").trim()).filter(Boolean);
 const rowsOf = (table) => table ? [...table.querySelectorAll("tbody tr")].map((tr) => [...tr.children].map(cellLines)) : [];
 const STAGE = { b1: 0, b2: 1, b3: 2, pc: 3 };   // fila de la tabla de sprints según el bloque
+/* Primera tabla que aparece después de un título h3 */
+function tableAfter(root, re) {
+  const h = [...root.querySelectorAll("h3")].find((x) => re.test(x.textContent));
+  for (let n = h?.nextElementSibling; n && n.nodeName !== "H3"; n = n.nextElementSibling) {
+    const t = n.nodeName === "TABLE" ? n : n.querySelector("table");
+    if (t) return t;
+  }
+  return null;
+}
+/* Metas: salen de los números de arriba de Plan-73 (si no cargó, las últimas conocidas) */
+function goals() {
+  const st = PLAN?.stats || [];
+  const f = (re) => st.find((s) => re.test(s.l));
+  const nums = (t) => (t || "").replace(/,/g, ".").match(/\d+(\.\d+)?/g)?.map(Number) || [];
+  const avg = (a) => a.length ? +(a.reduce((x, y) => x + y, 0) / a.length).toFixed(2) : null;
+  const walk = f(/caminando/i), comp = f(/competencia|categor/i), now = f(/hoy/i), rate = f(/semana/i);
+  return {
+    walking: avg(nums(walk?.v)) ?? S.goals.walking, walkingTxt: walk?.v || `${S.goals.walking} kg`,
+    weight: nums(comp?.v)[0] ?? S.goals.weight,
+    now: nums(now?.v)[0] ?? null, nowTxt: now ? `${now.v} · ${now.l}` : "",
+    rate: rate?.v || "0,25–0,4", rateTxt: rate ? `${rate.v} ${rate.l}` : "0,25–0,4 kg por semana",
+  };
+}
+const KIND = { key: "principal", rfd: "RFD", plio: "pliometría", iso: "isometría" };
+const kindTag = (i) => i.kind && KIND[i.kind] ? ` <span class="xk ${i.kind}">${KIND[i.kind]}</span>` : "";
+/* Estiramientos que tocan después de una sesión (según "Cuándo hacer cada cosa") */
+function stretchFor(letter) {
+  const st = PLAN?.stretch;
+  if (!st) return [];
+  const row = st.when.find((r) => new RegExp(`\\b${letter}\\b`).test((r[0] || []).join(" ")));
+  if (!row) return [];
+  const want = (row[1] || []).join(" ").toLowerCase().split(/,|\sy\s/).map((s) => s.trim().split(" ")[0].slice(0, 6)).filter(Boolean);
+  return st.zones.filter((z) => want.some((w) => (z[0] || []).join(" ").toLowerCase().includes(w)));
+}
 
 function buildRoutine() { const r = routineFor(currentBlock()); if (r) ROUTINE = r; }
 function routineFor(b) {
@@ -158,7 +192,7 @@ function routineFor(b) {
     const L = w.s;
     let items, tg;
     if (b.s[L]) {
-      items = b.s[L].map((e) => ({ n: e[0], rx: e[1], note: e[2], key: !!e[3] }));
+      items = b.s[L].map((e) => ({ n: e[0], rx: e[1], note: e[2], key: e[3] === 1, kind: e[3] === 1 ? "key" : typeof e[3] === "string" ? e[3] : "" }));
       tg = L === "C" || L === "D" ? "judo" : "gym";
     } else if (/^S/.test(L)) {
       const row = PLAN.sprints?.[L]?.rows?.[STAGE[b.id] ?? 0];
@@ -221,8 +255,31 @@ async function loadPlan73() {
       };
     }
     const updated = doc.querySelector("footer")?.textContent.trim() || "";
+    // Números de arriba (peso hoy, metas, kg por semana)
+    const stats = [...doc.querySelectorAll(".stats .stat")].map((s) => ({ v: s.querySelector("b")?.textContent.trim() || "", l: s.querySelector("span")?.textContent.trim() || "" }));
+    // Calentamiento, estiramientos por zona y cuándo hacer cada uno
+    const stretch = est ? {
+      warm: rowsOf(tableAfter(est, /calentamiento din/i)),
+      zones: rowsOf(tableAfter(est, /los estiramientos/i)),
+      when: rowsOf(tableAfter(est, /cu[aá]ndo hacer/i)),
+    } : null;
+    // Cómo se ejecuta: RPE, descansos y cómo subir los pesos
+    const ex = doc.querySelector("#ejecucion");
+    const exec = ex ? Object.fromEntries([["rpe", /escala rpe/i], ["rest", /descansos/i], ["prog", /subir los pesos/i]].map(([k, re]) => {
+      const p = [...ex.querySelectorAll(".panel")].find((x) => re.test(x.querySelector("h3")?.textContent || ""));
+      return [k, p ? { title: p.querySelector("h3").textContent.replace(/^\d+\s*·\s*/, "").trim(), html: clean(p).replace(/^<h4>.*?<\/h4>/, "") } : null];
+    })) : {};
+    // Comida (números diarios y control de peso) y objetivos de fuerza
+    const secBy = (re) => [...doc.querySelectorAll("section")].find((s) => re.test(s.querySelector("h2")?.textContent || ""));
+    const food = secBy(/^comida/i);
+    const panelBy = (root, re) => root && [...root.querySelectorAll(".panel")].find((x) => re.test(x.querySelector("h3")?.textContent || ""));
+    const daily = panelBy(food, /n[uú]meros diarios/i);
+    const control = panelBy(food, /control de peso/i);
+    const objSec = secBy(/^objetivos/i);
+    const nutrition = { daily: rowsOf(daily?.querySelector("table")), control: control ? clean(control.querySelector("ul") || control) : "" };
+    const strength = { title: objSec?.querySelector("h2").textContent.trim() || "", head: objSec ? [...objSec.querySelectorAll("thead th")].map((t) => t.textContent.trim()) : [], rows: rowsOf(objSec?.querySelector("table")) };
     PLAN = {
-      week, rules: rules ? clean(rules) : "", W: v.W, SS: v.SS, sprints, rest, updated,
+      week, rules: rules ? clean(rules) : "", W: v.W, SS: v.SS, sprints, rest, updated, stats, stretch, exec, nutrition, strength,
       blocks: v.blocks.map(({ id, name, weeks, title, intro, s }) => ({ id, name, weeks, title, intro, s })),
     };
     planStatus = "live";
@@ -321,18 +378,19 @@ function weightChart() {
   const pts = [...S.weights].sort((a, b) => a.date.localeCompare(b.date));
   if (pts.length < 2) return `<p class="empty">Cargá al menos 2 pesajes para ver la gráfica.</p>`;
   const W = 700, H = 220, P = 30;
-  const vals = pts.map((p) => +p.kg).concat([S.goals.weight]);
+  const goal = goals().walking;
+  const vals = pts.map((p) => +p.kg).concat([goal]);
   const min = Math.floor(Math.min(...vals) - 1), max = Math.ceil(Math.max(...vals) + 1);
   const x = (i) => P + (i * (W - 2 * P)) / (pts.length - 1);
   const y = (v) => H - P - ((v - min) * (H - 2 * P)) / (max - min);
   const line = pts.map((p, i) => `${x(i)},${y(+p.kg)}`).join(" ");
   const area = `${P},${H - P} ${line} ${W - P},${H - P}`;
-  const gy = y(S.goals.weight);
+  const gy = y(goal);
   return `
   <svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Evolución del peso">
     <defs><linearGradient id="wg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4d7cff" stop-opacity=".35"/><stop offset="1" stop-color="#4d7cff" stop-opacity="0"/></linearGradient></defs>
     <line x1="${P}" x2="${W - P}" y1="${gy}" y2="${gy}" stroke="#7b5cff" stroke-dasharray="6 6" />
-    <text x="${W - P}" y="${gy - 6}" fill="#a78bff" font-size="12" text-anchor="end" font-family="Geist Mono">meta ${S.goals.weight} kg</text>
+    <text x="${W - P}" y="${gy - 6}" fill="#a78bff" font-size="12" text-anchor="end" font-family="Geist Mono">meta caminando ${goal} kg</text>
     <text x="4" y="${y(max) + 4}" fill="#5d6580" font-size="11" font-family="Geist Mono">${max}</text>
     <text x="4" y="${y(min) + 4}" fill="#5d6580" font-size="11" font-family="Geist Mono">${min}</text>
     <polygon points="${area}" fill="url(#wg)" />
@@ -342,7 +400,7 @@ function weightChart() {
 }
 
 function exList(d) {
-  return `<ol class="ex-grid">${d.items.map((i) => `<li class="${i.key ? "key" : ""}"><span class="n">${esc(i.n)}</span>${i.rx ? `<span class="rx">${esc(i.rx)}</span>` : ""}</li>`).join("")}</ol>`;
+  return `<ol class="ex-grid">${d.items.map((i) => `<li class="${i.key ? "key" : ""}"><span class="n">${esc(i.n)}${i.kind && i.kind !== "key" ? kindTag(i) : ""}</span>${i.rx ? `<span class="rx">${esc(i.rx)}</span>` : ""}</li>`).join("")}</ol>`;
 }
 function weekStrip(selDay, clickable, R = ROUTINE) {
   const dates = weekDates();
@@ -395,8 +453,10 @@ const VIEWS = {
     const bestLang = S.langs.map((l) => ({ l, n: streakOf(l.days) })).sort((a, b) => b.n - a.n)[0];
     const active = S.projects.filter((p) => p.status === "Activo");
     const study = S.study.filter((s) => !s.done).sort((a, b) => (a.due || "9").localeCompare(b.due || "9")).slice(0, 4);
-    const startKg = ws[0]?.kg;
-    const pct = lastW && startKg !== undefined && S.goals.walking !== startKg ? Math.max(0, Math.min(100, ((lastW.kg - startKg) / (S.goals.walking - startKg)) * 100)) : 0;
+    const G = goals();
+    const nowKg = lastW ? +lastW.kg : G.now;
+    const startKg = ws.length > 1 ? +ws[0].kg : G.now;
+    const pct = nowKg != null && startKg != null && G.walking !== startKg ? Math.max(0, Math.min(100, ((nowKg - startKg) / (G.walking - startKg)) * 100)) : 0;
     return `
     ${head(`${hi}, Manu`, "Esto es lo que tenés hoy.", "", new Date().toLocaleDateString("es-UY", { weekday: "long", day: "numeric", month: "long" }))}
     <div class="bento">
@@ -413,7 +473,7 @@ const VIEWS = {
       </div>
       <div class="c-4 side stack">
         <div class="kpis">
-          <a class="kpi" href="#fisico"><span class="label-sm">Peso</span><div class="v">${lastW ? lastW.kg : "—"}<small>kg</small></div><div class="d">meta ${S.goals.walking} caminando</div><div class="bar"><i style="width:${pct}%"></i></div></a>
+          <a class="kpi" href="#fisico"><span class="label-sm">Peso</span><div class="v">${nowKg ?? "—"}<small>kg</small></div><div class="d">meta ${esc(G.walkingTxt)} caminando</div><div class="bar"><i style="width:${pct}%"></i></div></a>
           <a class="kpi" href="#rutina"><span class="label-sm">Semana</span><div class="v">${gymWeek}<small>/ ${trainDays}</small></div><div class="d">días de entreno hechos</div><div class="bar"><i style="width:${Math.min(100, (gymWeek / trainDays) * 100)}%"></i></div></a>
           <a class="kpi" href="#judo"><span class="label-sm">Técnicas</span><div class="v">${dom}<small>/ 100</small></div><div class="d">dominadas</div><div class="bar"><i style="width:${dom}%"></i></div></a>
           <a class="kpi" href="#idiomas"><span class="label-sm">Idiomas</span><div class="v">${bestLang ? bestLang.n : "—"}${bestLang ? "<small>días</small>" : ""}</div><div class="d">${bestLang ? `racha en ${esc(bestLang.l.name)}` : "agregá un idioma"}</div></a>
@@ -456,13 +516,17 @@ const VIEWS = {
     const d = R[selDay];
     let detail = "";
     if (isLift(d)) {
+      const warm = PLAN?.stretch?.warm || [];
+      const str = stretchFor(d.letter);
+      const rowList = (rows, cols) => `<ul class="mini-rows">${rows.map((r) => `<li><b>${esc(r[0].join(" "))}</b><span class="mono">${esc((r[cols[0]] || []).join(" "))}</span>${cols[1] && r[cols[1]]?.length ? `<span class="muted">${esc(r[cols[1]].join(" "))}</span>` : ""}</li>`).join("")}</ul>`;
+      const phase = (txt, cls, body) => body ? `<details class="phase-d ${cls}"><summary class="phase ${cls}">${esc(txt)}</summary>${body}</details>` : `<div class="phase ${cls}">${esc(txt)}</div>`;
       detail = `
-        ${PLAN?.W ? `<div class="phase">${esc(PLAN.W)}</div>` : ""}
+        ${PLAN?.W ? phase(PLAN.W, "", warm.length ? rowList(warm, [1, 2]) : "") : ""}
         <div class="table-wrap"><table class="ex-table">
           <thead><tr><th>#</th><th>Ejercicio</th><th class="num">Series × reps</th><th>Nota</th></tr></thead>
-          <tbody>${d.items.map((i, n) => `<tr class="${i.key ? "key" : ""}"><td>${String(n + 1).padStart(2, "0")}</td><td class="n">${esc(i.n)}${i.key ? ` <span class="tag" style="margin-left:6px">principal</span>` : ""}</td><td class="num rx">${esc(i.rx || "")}</td><td class="note">${esc(i.note || "")}</td></tr>`).join("")}</tbody>
+          <tbody>${d.items.map((i, n) => `<tr class="${i.key ? "key" : ""}"><td>${String(n + 1).padStart(2, "0")}</td><td class="n">${esc(i.n)}${kindTag(i)}</td><td class="num rx">${esc(i.rx || "")}</td><td class="note">${esc(i.note || "")}</td></tr>`).join("")}</tbody>
         </table></div>
-        ${PLAN?.SS?.[d.letter] ? `<div class="phase str">${esc(PLAN.SS[d.letter])}</div>` : ""}`;
+        ${PLAN?.SS?.[d.letter] ? phase(PLAN.SS[d.letter], "str", str.length ? rowList(str.map((z) => [[z[1].join(" ")], z[2], z[0]]), [1, 2]) : "") : ""}`;
     } else if (isSprint(d) && PLAN?.sprints?.[d.letter]) {
       const sp = PLAN.sprints[d.letter];
       const stage = STAGE[b.id] ?? 0;
@@ -493,6 +557,7 @@ const VIEWS = {
       <div class="c-4 side stack">
         ${b ? `<div class="card"><span class="label-sm">${esc(b.name)} · ${esc(b.weeks)}</span><h2 style="margin:6px 0 8px">${esc(b.title)}</h2><p class="muted" style="margin:0">${esc(b.intro || "")}</p></div>` : ""}
         ${PLAN?.rules ? `<div class="card"><div class="card-head"><h2>La semana</h2></div><div class="plan-html">${PLAN.rules}</div></div>` : ""}
+        ${PLAN?.exec && Object.values(PLAN.exec).some(Boolean) ? `<div class="card"><div class="card-head"><h2>Cómo se ejecuta</h2></div>${["rpe", "rest", "prog"].map((k) => PLAN.exec[k] ? `<details class="more"><summary>${esc(PLAN.exec[k].title)}</summary><div class="plan-html">${PLAN.exec[k].html}</div></details>` : "").join("")}</div>` : ""}
         ${notesCard("rutina")}
       </div>
     </div>`;
@@ -532,13 +597,18 @@ const VIEWS = {
     const pts = sortedWeights().reverse();
     const first = pts[pts.length - 1], last = pts[0];
     const diff = first && last ? (last.kg - first.kg).toFixed(1) : "—";
+    const G = goals();
+    // Ritmo real: kg por semana entre el primer y el último pesaje
+    const weeks = first && last ? (new Date(last.date) - new Date(first.date)) / 6048e5 : 0;
+    const perWeek = weeks >= 1 ? ((last.kg - first.kg) / weeks).toFixed(2).replace(".", ",") : null;
+    const N = PLAN?.nutrition, ST = PLAN?.strength;
     return `
-    ${head("Cambio físico", "Peso y progreso. Meta: 0,25–0,4 kg por semana.")}
+    ${head("Cambio físico", `Metas de Plan-73 · ${esc(G.rateTxt)}.`, syncBadge())}
     <div class="kpis row4" style="margin-bottom:16px">
-      <div class="kpi"><span class="label-sm">Peso actual</span><div class="v">${last ? last.kg : "—"}<small>kg</small></div></div>
-      <div class="kpi"><span class="label-sm">Cambio total</span><div class="v">${diff > 0 ? "+" : ""}${diff}<small>kg</small></div></div>
-      <div class="kpi"><span class="label-sm">Meta caminando</span><div class="v">${S.goals.walking}<small>kg</small></div></div>
-      <div class="kpi"><span class="label-sm">Categoría</span><div class="v">−${S.goals.weight}<small>kg</small></div></div>
+      <div class="kpi"><span class="label-sm">Peso actual</span><div class="v">${last ? last.kg : G.now ?? "—"}<small>kg</small></div><div class="d">${last ? fmtDate(last.date) : G.nowTxt ? "según Plan-73" : ""}</div></div>
+      <div class="kpi"><span class="label-sm">Cambio total</span><div class="v">${diff > 0 ? "+" : ""}${diff}<small>kg</small></div><div class="d">${perWeek ? `${perWeek} kg/semana · meta ${esc(G.rate)}` : `meta ${esc(G.rate)} kg/semana`}</div></div>
+      <div class="kpi"><span class="label-sm">Meta caminando</span><div class="v">${esc(G.walkingTxt.replace(/\s*kg$/, ""))}<small>kg</small></div></div>
+      <div class="kpi"><span class="label-sm">Categoría</span><div class="v">−${G.weight}<small>kg</small></div><div class="d">peso de competencia</div></div>
     </div>
     <div class="bento">
       <div class="card c-8">
@@ -552,14 +622,9 @@ const VIEWS = {
         </form>
       </div>
       <div class="c-4 side stack">
-        <div class="card">
-          <div class="card-head"><h2>Metas</h2></div>
-          <form class="form-grid" data-form="goals">
-            ${fieldHTML({ k: "weight", label: "Categoría (kg)", type: "number", step: "0.1" }, S.goals.weight)}
-            ${fieldHTML({ k: "walking", label: "Caminando (kg)", type: "number", step: "0.1" }, S.goals.walking)}
-            <div class="wide"><button class="btn">Guardar</button></div>
-          </form>
-        </div>
+        ${N?.daily?.length ? `<div class="card"><div class="card-head"><h2>Números diarios</h2><span class="sub">Plan-73</span></div>
+          <ul class="mini-rows">${N.daily.map((r) => `<li><span class="lbl">${esc(r[0].join(" "))}</span><span class="val">${esc((r[1] || []).join(" "))}</span></li>`).join("")}</ul></div>` : ""}
+        ${N?.control ? `<div class="card"><div class="card-head"><h2>Control de peso</h2></div><div class="plan-html" style="margin:0">${N.control}</div></div>` : ""}
         ${tasksCard("fisico")}
         ${notesCard("fisico")}
       </div>
@@ -567,11 +632,18 @@ const VIEWS = {
     <div class="bento">
       <div class="card c-12">
         <div class="card-head"><h2>Pesajes</h2><span class="sub">${pts.length}</span></div>
+        <p class="small muted" style="margin:-6px 0 10px">Tus pesajes se anotan acá. Las metas salen solas de Plan-73: si las cambiás allá, cambian acá.</p>
         <div class="table-wrap"><table><thead><tr><th>Fecha</th><th class="num">Kg</th><th>Nota</th><th></th></tr></thead><tbody>
           ${pts.map((p) => `<tr><td>${fmtDate(p.date)}</td><td class="num">${esc(p.kg)}</td><td>${esc(p.note)}</td><td><button class="del" data-act="del-weight" data-id="${p.id}">✕</button></td></tr>`).join("") || `<tr><td colspan="4" class="empty">Sin pesajes.</td></tr>`}
         </tbody></table></div>
       </div>
-    </div>`;
+    </div>
+    ${ST?.rows?.length ? `<div class="bento"><div class="card c-12">
+      <div class="card-head"><h2>${esc(ST.title || "Objetivos de fuerza")}</h2><span class="sub">Plan-73</span></div>
+      <div class="table-wrap"><table><thead><tr>${ST.head.map((h, i) => `<th${i === 2 ? ' class="num"' : ""}>${esc(h)}</th>`).join("")}</tr></thead><tbody>
+        ${ST.rows.map((r) => `<tr>${r.map((c, i) => `<td${i === 2 ? ' class="num"' : ""}>${esc(c.join(" "))}</td>`).join("")}</tr>`).join("")}
+      </tbody></table></div>
+    </div></div>` : ""}`;
   },
 
   surf() {
@@ -854,7 +926,6 @@ document.addEventListener("submit", (e) => {
     case "task": S.tasks.unshift({ id: uid(), text: v.text, area: f.dataset.area || v.area, done: false }); break;
     case "check": S[f.dataset.key].push({ id: uid(), text: v.text, done: false }); break;
     case "weight": S.weights.push({ id: uid(), date: v.date || today(), kg: +v.kg, note: v.note }); break;
-    case "goals": S.goals = { weight: +v.weight, walking: +v.walking }; break;
     case "study": S.study.push({ id: uid(), ...v, done: false }); break;
     case "idea": addIdea(v.text, v.tag); break;
     case "lang": { const l = { id: uid(), name: v.name.trim(), level: "A1", goal: "B2", days: [], vocab: [], res: [] }; S.langs.push(l); selLang = l.id; break; }

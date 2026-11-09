@@ -8,7 +8,8 @@ Mi hub personal: rutina de Plan-73, judo, cambio físico, surf, estilo de vida e
 - **Inicio**: lo que toca hoy, la semana, tareas, ideas, proyectos y estudio.
 - **Rutina / Gym**: se lee en vivo de [Plan-73](https://manu-alz.github.io/Plan-73/) (semana, bloques, ejercicios, sprints S1/S2, sesión larga). Si cambio Plan-73, el HQ se actualiza solo.
 - **Judo**: frase del día (218 frases y datos), los 4 pilares y las 100 técnicas del Kodokan con filtros por cinturón, grupo y estado.
-- **Cambio físico**, **Surf**, **Estilo de vida**, **Estudio**, **Idiomas**, **Proyectos**, **Contenido**, **Ideas**.
+- **Cambio físico**: mis pesajes + metas, números diarios, control de peso y objetivos de fuerza leídos de Plan-73.
+- **Surf**, **Estilo de vida**, **Estudio**, **Idiomas**, **Proyectos**, **Contenido**, **Ideas**.
 - Cada sección tiene sus propias notas. La barra de arriba guarda ideas desde cualquier página.
 
 ## Archivos
