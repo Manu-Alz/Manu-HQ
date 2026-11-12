@@ -10,6 +10,7 @@ Mi hub personal: rutina de Plan-73, judo, cambio físico, surf, estilo de vida e
 - **Judo**: frase del día (218 frases y datos), los 4 pilares y las 100 técnicas del Kodokan con filtros por cinturón, grupo y estado.
 - **Cambio físico**: mis pesajes + metas, números diarios, control de peso y objetivos de fuerza leídos de Plan-73.
 - **Compras**: lista de cosas para comprar, con nota o link y precio opcionales.
+- **Watch list**: películas, series y videos para ver, con tipo y nota o link.
 - **Surf**, **Estilo de vida**, **Estudio**, **Idiomas**, **Proyectos**, **Contenido**, **Ideas**.
 - Cada sección tiene sus propias notas. La barra de arriba guarda ideas desde cualquier página.
 

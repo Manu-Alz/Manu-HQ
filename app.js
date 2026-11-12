@@ -51,12 +51,13 @@ const ICONS = {
   contenido: "M3 6h13v12H3zM16 10l5-3v10l-5-3",
   idiomas: "M5 8l6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18h6",
   compras: "M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0",
+  watch: "M2 4h20v13H2zM8 21h8M12 17v4M10 8l5 2.5-5 2.5z",
   ideas: "M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z",
 };
 const NAV = [
   { group: null, items: [["inicio", "Inicio"]] },
   { group: "Cuerpo", items: [["rutina", "Rutina / Gym"], ["judo", "Judo"], ["fisico", "Cambio físico"], ["surf", "Surf"]] },
-  { group: "Vida", items: [["uruguay", "Estilo de vida"], ["estudio", "Estudio"], ["idiomas", "Idiomas"], ["compras", "Compras"]] },
+  { group: "Vida", items: [["uruguay", "Estilo de vida"], ["estudio", "Estudio"], ["idiomas", "Idiomas"], ["compras", "Compras"], ["watch", "Watch list"]] },
   { group: "Trabajo", items: [["proyectos", "Proyectos"], ["contenido", "Contenido"], ["ideas", "Ideas"]] },
 ];
 
@@ -86,6 +87,7 @@ const DEFAULT_STATE = {
   notes: {},
   langs: [],
   buy: [],
+  watch: [],
 };
 
 /* ---------- Niveles de idiomas ---------- */
@@ -106,7 +108,7 @@ function normalize(data) {
   const s = { ...structuredClone(DEFAULT_STATE), ...data };
   s.logs = { ...DEFAULT_STATE.logs, ...s.logs };
   for (const k of ["waza", "notes"]) s[k] = s[k] || {};
-  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "places", "langs", "buy"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
+  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "places", "langs", "buy", "watch"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
   // Las notas libres viejas de Uruguay pasan a la lista de notas (una sola vez)
   if (s.uyNotes) { (s.notes.uruguay = s.notes.uruguay || []).unshift({ id: uid(), text: s.uyNotes, date: today() }); }
   s.langs.forEach(fixLang);
@@ -872,6 +874,37 @@ const VIEWS = {
     </div>`;
   },
 
+  watch() {
+    const KINDS = ["Película", "Serie", "Anime", "Documental", "Video", "Otro"];
+    const pend = S.watch.filter((x) => !x.done), seen = S.watch.filter((x) => x.done);
+    const row = (x) => `<li class="${x.done ? "done" : ""}">
+      <input type="checkbox" data-act="toggle-check" data-key="watch" data-id="${x.id}" ${x.done ? "checked" : ""} aria-label="Visto" />
+      <span class="grow">${esc(x.text)}${x.note ? `<span class="buy-note">${linkify(x.note)}</span>` : ""}</span>
+      ${x.kind ? `<span class="small mono buy-price">${esc(x.kind)}</span>` : ""}
+      <button class="del" data-act="del-check" data-key="watch" data-id="${x.id}" title="Borrar">✕</button></li>`;
+    return `
+    ${head("Watch list", "Películas, series y videos para ver. Se guarda solo.")}
+    <div class="bento">
+      <div class="card c-8">
+        <div class="card-head"><h2>Para ver</h2><span class="sub">${pend.length}</span></div>
+        <form class="inline buy-form" data-form="watch">
+          <input name="text" placeholder="Qué quiero ver…" required />
+          <input name="note" placeholder="Dónde verlo, link o nota (opcional)" />
+          <select name="kind" style="flex:0 1 130px">${KINDS.map((k) => `<option>${k}</option>`).join("")}</select>
+          <button class="btn btn-primary">Agregar</button>
+        </form>
+        <ul class="list" style="margin-top:14px">${pend.map(row).join("") || `<li class="empty" style="background:none">Nada pendiente para ver.</li>`}</ul>
+      </div>
+      <div class="c-4 side stack">
+        <div class="card">
+          <div class="card-head"><h2>Visto</h2>${seen.length ? `<button class="btn btn-sm btn-ghost" data-act="clear-watched">Vaciar</button>` : `<span class="sub">0</span>`}</div>
+          <ul class="list">${seen.map(row).join("") || `<li class="empty" style="background:none">Tildá algo cuando lo veas.</li>`}</ul>
+        </div>
+        ${notesCard("watch", "Notas de la watch list")}
+      </div>
+    </div>`;
+  },
+
   ideas() {
     return `
     ${head("Ideas", "Todo lo que se me ocurre. Se guarda solo, aunque recargues la página.")}
@@ -979,6 +1012,7 @@ document.addEventListener("submit", (e) => {
     case "weight": S.weights.push({ id: uid(), date: v.date || today(), kg: +v.kg, note: v.note }); break;
     case "study": S.study.push({ id: uid(), ...v, done: false }); break;
     case "buy": S.buy.unshift({ id: uid(), text: v.text.trim(), price: v.price ? +v.price : null, note: (v.note || "").trim(), done: false, date: today() }); break;
+    case "watch": S.watch.unshift({ id: uid(), text: v.text.trim(), kind: v.kind, note: (v.note || "").trim(), done: false, date: today() }); break;
     case "idea": addIdea(v.text, v.tag); break;
     case "lang": { const l = fixLang({ id: uid(), name: v.name.trim(), level: "A1", goal: "B2", days: [], vocab: [], res: [] }); S.langs.push(l); selLang = l.id; break; }
     case "lang-res": langById(f.dataset.id).res.push({ id: uid(), text: v.text }); break;
@@ -1005,6 +1039,7 @@ function act(el) {
     case "del-check": S[key] = drop(S[key]); break;
     case "del-weight": S.weights = drop(S.weights); break;
     case "clear-bought": S.buy = S.buy.filter((x) => !x.done); break;
+    case "clear-watched": S.watch = S.watch.filter((x) => !x.done); break;
     case "done-today":
       if (S.logs.gym.some((l) => l.date === today())) S.logs.gym = S.logs.gym.filter((l) => l.date !== today());
       else { S.logs.gym.push({ id: uid(), date: today(), session: sessionText(ROUTINE[new Date().getDay()]) }); toast("Día marcado ✓"); }
