@@ -88,6 +88,19 @@ const DEFAULT_STATE = {
   buy: [],
 };
 
+/* ---------- Niveles de idiomas ---------- */
+const LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2", "Nativo"];   // escala europea (MCER)
+const JLPT = ["N5", "N4", "N3", "N2", "N1", "Nativo"];                // japonés: del N5 (básico) al N1 (avanzado)
+const TO_JLPT = { A1: "N5", A2: "N4", B1: "N3", B2: "N2", C1: "N1", C2: "N1" };
+const levelsOf = (l) => /jap[oó]n|japan|nihon|日本/i.test(l.name) ? JLPT : LEVELS;
+/* Deja el nivel y la meta dentro de la escala que usa ese idioma */
+function fixLang(l) {
+  const sc = levelsOf(l);
+  if (!sc.includes(l.level)) l.level = TO_JLPT[l.level] && sc === JLPT ? TO_JLPT[l.level] : sc[0];
+  if (!sc.includes(l.goal)) l.goal = TO_JLPT[l.goal] && sc === JLPT ? TO_JLPT[l.goal] : sc[sc.length - 3];
+  return l;
+}
+
 /* Completa datos viejos o importados con lo que falte */
 function normalize(data) {
   const s = { ...structuredClone(DEFAULT_STATE), ...data };
@@ -96,6 +109,7 @@ function normalize(data) {
   for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "places", "langs", "buy"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
   // Las notas libres viejas de Uruguay pasan a la lista de notas (una sola vez)
   if (s.uyNotes) { (s.notes.uruguay = s.notes.uruguay || []).unshift({ id: uid(), text: s.uyNotes, date: today() }); }
+  s.langs.forEach(fixLang);
   delete s.uyNotes; delete s.planStart;
   return s;
 }
@@ -428,7 +442,6 @@ let selDay = new Date().getDay();
 let wazaF = { belt: "todos", group: "todos", status: "todos", q: "" };
 let quoteIdx = Math.floor(Math.random() * JUDO_QUOTES.length);
 /* ---------- Idiomas ---------- */
-const LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2", "Nativo"];
 let selLang = null, vocabQ = "";
 function streakOf(days) {
   const set = new Set(days); let n = 0; const d = new Date();
@@ -766,6 +779,7 @@ const VIEWS = {
 
   idiomas() {
     const L = S.langs.find((l) => l.id === selLang) || S.langs[0];
+    const SC = L ? levelsOf(L) : LEVELS;
     const add = `
       <form class="inline" data-form="lang">
         <input name="name" placeholder="Agregar idioma (ej: Inglés, Japonés, Portugués)" required />
@@ -793,11 +807,11 @@ const VIEWS = {
           <button class="btn btn-sm btn-ghost" data-act="del-lang" data-id="${L.id}">Quitar idioma</button>
         </div>
         <div class="lang-level">
-          <div><span class="label-sm">Nivel</span>
-            <select data-act="lang-level" data-id="${L.id}">${LEVELS.map((x) => `<option ${x === L.level ? "selected" : ""}>${x}</option>`).join("")}</select></div>
-          <div class="lang-bar">${LEVELS.slice(0, 6).map((x, i) => `<i class="${LEVELS.indexOf(L.level) >= i ? "on" : ""} ${L.goal === x ? "goal" : ""}" title="${x}">${x}</i>`).join("")}</div>
+          <div><span class="label-sm">Nivel${SC === JLPT ? " · JLPT" : ""}</span>
+            <select data-act="lang-level" data-id="${L.id}">${SC.map((x) => `<option ${x === L.level ? "selected" : ""}>${x}</option>`).join("")}</select></div>
+          <div class="lang-bar" style="grid-template-columns:repeat(${SC.length - 1},minmax(0,1fr))">${SC.slice(0, -1).map((x, i) => `<i class="${SC.indexOf(L.level) >= i ? "on" : ""} ${L.goal === x ? "goal" : ""}" title="${x}">${x}</i>`).join("")}</div>
           <div><span class="label-sm">Meta</span>
-            <select data-act="lang-goal" data-id="${L.id}">${LEVELS.map((x) => `<option ${x === L.goal ? "selected" : ""}>${x}</option>`).join("")}</select></div>
+            <select data-act="lang-goal" data-id="${L.id}">${SC.map((x) => `<option ${x === L.goal ? "selected" : ""}>${x}</option>`).join("")}</select></div>
         </div>
         <div class="lang-streak">
           <button class="btn ${doneToday ? "" : "btn-primary"}" data-act="lang-today" data-id="${L.id}">${doneToday ? "✓ Practiqué hoy (deshacer)" : "Practiqué hoy"}</button>
@@ -966,7 +980,7 @@ document.addEventListener("submit", (e) => {
     case "study": S.study.push({ id: uid(), ...v, done: false }); break;
     case "buy": S.buy.unshift({ id: uid(), text: v.text.trim(), price: v.price ? +v.price : null, note: (v.note || "").trim(), done: false, date: today() }); break;
     case "idea": addIdea(v.text, v.tag); break;
-    case "lang": { const l = { id: uid(), name: v.name.trim(), level: "A1", goal: "B2", days: [], vocab: [], res: [] }; S.langs.push(l); selLang = l.id; break; }
+    case "lang": { const l = fixLang({ id: uid(), name: v.name.trim(), level: "A1", goal: "B2", days: [], vocab: [], res: [] }); S.langs.push(l); selLang = l.id; break; }
     case "lang-res": langById(f.dataset.id).res.push({ id: uid(), text: v.text }); break;
     case "vocab": langById(f.dataset.id).vocab.unshift({ id: uid(), w: v.w, m: v.m }); break;
     case "note": (S.notes[f.dataset.key] = S.notes[f.dataset.key] || []).unshift({ id: uid(), text: v.text, date: today() }); break;
