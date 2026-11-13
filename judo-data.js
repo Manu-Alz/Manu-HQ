@@ -31,6 +31,15 @@ const KATAME_BELT = {
   marron: ["Sode-guruma-jime", "Tsukkomi-jime", "Ude-hishigi-hara-gatame", "Ude-hishigi-ashi-gatame", "Ude-hishigi-te-gatame", "Ude-hishigi-sankaku-gatame"],
 };
 
+/* Nage-waza fuera del Gokyo (Habukareta y Shinmeisho): cinturón según cuándo se suelen enseñar */
+const EXTRA_BELT = {
+  amarillo: ["Ippon-seoi-nage"],
+  naranja: ["Seoi-otoshi", "O-soto-otoshi"],
+  verde: ["Sode-tsurikomi-goshi", "Morote-gari", "Kuchiki-taoshi", "Kibisu-gaeshi", "Ko-uchi-makikomi", "Harai-makikomi", "Uchi-makikomi"],
+  azul: ["O-soto-makikomi", "Uchi-mata-makikomi", "Tsubame-gaeshi", "O-soto-gaeshi", "O-uchi-gaeshi", "Ko-uchi-gaeshi", "Uchi-mata-sukashi", "Hikikomi-gaeshi", "Obi-tori-gaeshi"],
+  marron: ["Hane-goshi-gaeshi", "Harai-goshi-gaeshi", "Uchi-mata-gaeshi", "Tawara-gaeshi", "Obi-otoshi", "Yama-arashi", "Daki-wakare"],
+};
+
 /* Prohibidas en competencia */
 const FORBIDDEN = ["Kani-basami", "Kawazu-gake", "Do-jime", "Ashi-garami"];
 
@@ -49,6 +58,7 @@ const WAZA_GROUPS = [
 function wazaBelt(name) {
   for (const [b, list] of Object.entries(GOKYO)) if (list.includes(name)) return b;
   for (const [b, list] of Object.entries(KATAME_BELT)) if (list.includes(name)) return b;
+  for (const [b, list] of Object.entries(EXTRA_BELT)) if (list.includes(name)) return b;
   return "negro";
 }
 function wazaOrigin(name) {

@@ -21,4 +21,8 @@ Mi hub personal: rutina de Plan-73, judo, cambio físico, surf, estilo de vida e
 - `judo-data.js`: técnicas, cinturones, pilares y frases
 
 ## Datos
-Todo se guarda en el navegador (localStorage) y sobrevive a recargas. Para pasar los datos a otro dispositivo: **Exportar datos** en uno e **Importar datos** en el otro. Conviene exportar de vez en cuando como backup.
+Todo se guarda en el navegador (localStorage) y sobrevive a recargas.
+
+**Sincronizar dispositivos** (botón en el menú): guarda los datos en un gist secreto de mi GitHub y los mantiene iguales en cada dispositivo conectado. Se conecta una vez por dispositivo con un token de GitHub que solo tenga permiso **Gists: Read and write**. Gana el cambio más nuevo.
+
+**Exportar / Importar datos** siguen estando para hacer un backup a mano.

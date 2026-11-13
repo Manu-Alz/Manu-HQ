@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,500..900&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@600&text=%E7%B7%B4%E4%BD%93%E5%8B%9D%E8%B2%A0%E8%87%AA%E4%BB%96%E5%85%B1%E6%A0%84%E8%AD%B7%E8%BA%AB%E6%9F%94%E9%81%93%E6%B3%95%E8%A1%93&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=21" />
+  <link rel="stylesheet" href="styles.css?v=22" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%234d7cff'/><text x='50' y='68' font-family='Arial Black' font-size='48' font-weight='900' text-anchor='middle' fill='white'>HQ</text></svg>" />
 </head>
 <body>
@@ -59,6 +59,7 @@
       <a class="brand" href="#inicio">MANU<span>HQ</span></a>
       <nav id="nav"></nav>
       <div class="sidebar-foot">
+        <button class="btn btn-ghost btn-sm" id="sync-btn">Sincronizar dispositivos</button>
         <button class="btn btn-ghost btn-sm" id="export-btn">Exportar datos</button>
         <label class="btn btn-ghost btn-sm">Importar datos
           <input type="file" id="import-file" accept="application/json" hidden />
@@ -86,12 +87,36 @@
     </div>
   </div>
 
+  <dialog id="sync-dialog" class="dlg">
+    <h2>Sincronizar dispositivos</h2>
+    <div id="sync-off">
+      <p>Tus datos se guardan en un gist secreto de tu cuenta de GitHub y se actualizan solos en cada dispositivo conectado.</p>
+      <ol>
+        <li>Abrí <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">crear token en GitHub</a>.</li>
+        <li>Nombre: Manu HQ. Vencimiento: sin vencimiento (o el más largo).</li>
+        <li>En “Account permissions” poné <b>Gists: Read and write</b>. Nada más.</li>
+        <li>Generá el token, copialo y pegalo acá. En los otros dispositivos pegás el mismo.</li>
+      </ol>
+      <form id="sync-form" class="inline" autocomplete="off">
+        <input name="token" type="password" placeholder="Token de GitHub" required />
+        <button class="btn btn-primary">Conectar</button>
+      </form>
+    </div>
+    <div id="sync-on" hidden>
+      <p>Este dispositivo está conectado. Estado: <b id="sync-status"></b></p>
+      <div class="inline">
+        <button class="btn btn-primary" id="sync-now" type="button">Sincronizar ahora</button>
+        <button class="btn btn-ghost" id="sync-disconnect" type="button">Desconectar</button>
+      </div>
+    </div>
+    <form method="dialog"><button class="btn btn-ghost btn-sm dlg-close">Cerrar</button></form>
+  </dialog>
   <div id="toast" class="toast" role="status"></div>
 
   <!-- ============ Spotify flotando abajo ============ -->
   <div id="player" class="player"><div id="pl-embed"></div></div>
 
-  <script src="judo-data.js?v=21"></script>
-  <script src="app.js?v=21"></script>
+  <script src="judo-data.js?v=22"></script>
+  <script src="app.js?v=22"></script>
 </body>
 </html>

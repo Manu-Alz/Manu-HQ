@@ -124,7 +124,7 @@ function load() {
   return structuredClone(DEFAULT_STATE);
 }
 lsDel("manuhq-plan73");   // caché vieja del lector de Plan-73
-function save() { lsSet(STORE_KEY, JSON.stringify(S)); }
+function save() { S.updatedAt = Date.now(); lsSet(STORE_KEY, JSON.stringify(S)); schedulePush(); }
 function commit() { save(); render(); }
 
 /* =========================================================
@@ -608,7 +608,7 @@ const VIEWS = {
       </div>
       <div class="filters" id="waza-filters">${wazaFilters()}</div>
       <div id="waza-list">${wazaList()}</div>
-      <p class="small muted" style="margin:18px 0 0">Cinturones según el Gokyo (un grupo por cinturón). El programa exacto puede cambiar según tu dojo o federación.</p>
+      <p class="small muted" style="margin:18px 0 0">Cinturones según el Gokyo (un grupo por cinturón); las técnicas fuera del Gokyo van donde se suelen enseñar. El programa exacto puede cambiar según tu dojo o federación.</p>
     </div>
     <div class="bento" style="margin-top:16px">${notesCard("judo", "Notas de judo", "c-12")}</div>`;
   },
@@ -1111,6 +1111,113 @@ $("#import-file").addEventListener("change", async (e) => {
   } catch { alert("Ese archivo no es un backup válido."); }
   e.target.value = "";
 });
+/* =========================================================
+   Sincronización entre dispositivos.
+   Los datos van a un gist secreto de tu GitHub; cada dispositivo
+   se conecta una vez con un token que solo tiene permiso de gists.
+   Gana el cambio más nuevo (S.updatedAt).
+   ========================================================= */
+const SYNC_KEY = "manuhq-sync", SYNC_FILE = "manu-hq-data.json", GH_API = "https://api.github.com";
+let SYNC = (() => { try { return JSON.parse(lsGet(SYNC_KEY)) || {}; } catch (e) { return {}; } })();
+let pushT = null, syncBusy = false;
+const SYNC_TXT = { off: "Sincronizar dispositivos", busy: "Sincronizando…", ok: "Sincronizado ✓", err: "Sin conexión · reintenta solo", auth: "Token inválido · reconectar" };
+function setSync(st) {
+  setSync.st = st;
+  const b = $("#sync-btn"); if (b) { b.textContent = SYNC_TXT[st]; b.dataset.st = st; }
+  const s = $("#sync-status"); if (s) s.textContent = SYNC.token ? SYNC_TXT[st] : "Sin conectar";
+}
+const saveSync = () => lsSet(SYNC_KEY, JSON.stringify(SYNC));
+async function gh(path, opt = {}) {
+  const r = await fetch(GH_API + path, { ...opt, cache: "no-store", headers: { Accept: "application/vnd.github+json", Authorization: "Bearer " + SYNC.token } });
+  if (!r.ok) throw Object.assign(new Error("GitHub " + r.status), { status: r.status });
+  return r.json();
+}
+const syncFail = (e) => setSync([401, 403, 404].includes(e.status) ? "auth" : "err");
+async function remoteRead() {
+  const f = (await gh("/gists/" + SYNC.gist)).files[SYNC_FILE];
+  if (!f) return null;
+  const data = JSON.parse(f.truncated ? await (await fetch(f.raw_url, { cache: "no-store" })).text() : f.content);
+  return data && typeof data === "object" ? data : null;
+}
+function applyRemote(data) {
+  S = normalize(data);
+  lsSet(STORE_KEY, JSON.stringify(S));
+  const a = document.activeElement;   // si estás escribiendo, no te borro el campo: se redibuja con tu próximo cambio
+  if (!(a && a.closest("#view") && /INPUT|TEXTAREA/.test(a.tagName) && a.value)) render();
+}
+async function syncPush() {
+  clearTimeout(pushT); pushT = null;
+  if (!SYNC.token || !SYNC.gist) return;
+  setSync("busy");
+  try {
+    await gh("/gists/" + SYNC.gist, { method: "PATCH", body: JSON.stringify({ files: { [SYNC_FILE]: { content: JSON.stringify(S) } } }) });
+    setSync("ok");
+  } catch (e) { syncFail(e); }
+}
+function schedulePush() {
+  if (!SYNC.token || !SYNC.gist) return;
+  clearTimeout(pushT); pushT = setTimeout(syncPush, 1500);
+}
+/* Trae lo de la nube si es más nuevo; sube lo de acá si es más nuevo */
+async function syncNow() {
+  if (!SYNC.token || !SYNC.gist || syncBusy) return;
+  syncBusy = true; setSync("busy");
+  try {
+    const r = await remoteRead(), rt = (r && r.updatedAt) || 0, lt = S.updatedAt || 0;
+    if (r && rt > lt) { applyRemote(r); setSync("ok"); }
+    else if (lt > rt || !r) await syncPush();
+    else setSync("ok");
+  } catch (e) { syncFail(e); }
+  syncBusy = false;
+}
+const hasLocalData = () => JSON.stringify({ ...S, updatedAt: undefined }) !== JSON.stringify(DEFAULT_STATE);
+async function syncConnect(token) {
+  SYNC = { token };
+  setSync("busy");
+  try {
+    const found = (await gh("/gists?per_page=100")).find((g) => g.files && g.files[SYNC_FILE]);
+    if (found) {
+      SYNC.gist = found.id;
+      const r = await remoteRead();
+      const useCloud = r && (!hasLocalData() || confirm("Ya hay datos guardados en la nube.\n\nAceptar: traer los de la nube a este dispositivo (reemplaza lo que hay acá).\nCancelar: subir lo de este dispositivo y reemplazar la nube."));
+      if (useCloud) { applyRemote(r); setSync("ok"); }
+      else { S.updatedAt = Date.now(); lsSet(STORE_KEY, JSON.stringify(S)); await syncPush(); }
+    } else {
+      S.updatedAt = S.updatedAt || Date.now(); lsSet(STORE_KEY, JSON.stringify(S));
+      const g = await gh("/gists", { method: "POST", body: JSON.stringify({ description: "Manu HQ · datos sincronizados", public: false, files: { [SYNC_FILE]: { content: JSON.stringify(S) } } }) });
+      SYNC.gist = g.id; setSync("ok");
+    }
+    saveSync(); toast("Dispositivo conectado ✓");
+    return true;
+  } catch (e) {
+    SYNC = {}; setSync("off");
+    alert(e.status === 401 ? "GitHub no aceptó ese token. Revisá que esté bien copiado." : e.status === 403 || e.status === 404 ? "El token no tiene permiso de Gists (lectura y escritura)." : "No pude conectar con GitHub. Probá de nuevo.");
+    return false;
+  }
+}
+$("#sync-btn").addEventListener("click", () => {
+  const on = !!SYNC.token;
+  $("#sync-off").hidden = on; $("#sync-on").hidden = !on;
+  setSync(setSync.st);
+  $("#sync-dialog").showModal();
+});
+$("#sync-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const inp = e.target.token, token = inp.value.trim(); if (!token) return;
+  inp.value = "";
+  if (await syncConnect(token)) $("#sync-dialog").close();
+});
+$("#sync-now").addEventListener("click", syncNow);
+$("#sync-disconnect").addEventListener("click", () => {
+  if (!confirm("Este dispositivo deja de sincronizar. Los datos quedan acá y en la nube. ¿Seguir?")) return;
+  SYNC = {}; lsDel(SYNC_KEY); setSync("off"); $("#sync-dialog").close();
+});
+document.addEventListener("visibilitychange", () => { if (document.hidden) { if (pushT) syncPush(); } else syncNow(); });
+window.addEventListener("online", syncNow);
+setInterval(() => { if (!document.hidden && !pushT) syncNow(); }, 120000);
+setSync(SYNC.token ? "ok" : "off");
+syncNow();
+
 $("#menu-btn").addEventListener("click", () => $("#sidebar").classList.toggle("open"));
 document.addEventListener("click", (e) => {
   const sb = $("#sidebar");
