@@ -123,7 +123,7 @@ function load() {
   } catch (e) { /* datos corruptos: arranco limpio */ }
   return structuredClone(DEFAULT_STATE);
 }
-lsDel("manuhq-plan73");   // caché vieja del lector de Plan-73
+lsDel("manuhq-plan73"); lsDel("manuhq-plan73v2");   // caché vieja del lector de Plan-73
 function save() { S.updatedAt = Date.now(); lsSet(STORE_KEY, JSON.stringify(S)); schedulePush(); }
 function commit() { save(); render(); }
 
@@ -166,7 +166,6 @@ function clean(node) {
 }
 const cellLines = (td) => clean(td).split(/<br>/).map((s) => s.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").trim()).filter(Boolean);
 const rowsOf = (table) => table ? [...table.querySelectorAll("tbody tr")].map((tr) => [...tr.children].map(cellLines)) : [];
-const STAGE = { b1: 0, b2: 1, b3: 2, pc: 3 };   // fila de la tabla de sprints según el bloque
 /* Primera tabla que aparece después de un título h3 */
 function tableAfter(root, re) {
   const h = [...root.querySelectorAll("h3")].find((x) => re.test(x.textContent));
@@ -176,6 +175,19 @@ function tableAfter(root, re) {
   }
   return null;
 }
+/* Todo lo que hay debajo de un título h3, hasta el próximo título */
+function sectionAfter(root, re) {
+  const h = root && [...root.querySelectorAll("h3")].find((x) => re.test(x.textContent.trim()));
+  if (!h) return null;
+  let html = "", table = null;
+  for (let n = h.nextElementSibling; n && n.nodeName !== "H3" && !n.querySelector("h3"); n = n.nextElementSibling) {
+    table = table || (n.nodeName === "TABLE" ? n : n.querySelector("table"));
+    html += clean({ childNodes: [n] });
+  }
+  html = html.replace(/<table>/g, '<div class="table-wrap"><table>').replace(/<\/table>/g, "</table></div>");
+  return { title: h.textContent.trim(), html, rows: rowsOf(table) };
+}
+const DAY_RE = { Lun: "lunes", Mar: "martes", "Mié": "mi[ée]rcoles", Jue: "jueves", Vie: "viernes", "Sáb": "s[áa]bado", Dom: "domingo" };
 /* Metas: salen de los números de arriba de Plan-73 (si no cargó, las últimas conocidas) */
 function goals() {
   const st = PLAN?.stats || [];
@@ -212,33 +224,33 @@ function routineFor(b) {
     if (b.s[L]) {
       items = b.s[L].map((e) => ({ n: e[0], rx: e[1], note: e[2], key: e[3] === 1, kind: e[3] === 1 ? "key" : typeof e[3] === "string" ? e[3] : "" }));
       tg = /judo/i.test(w.t) ? "judo" : "gym";
-    } else if (/^S/.test(L)) {
-      // Si el bloque no dice en qué etapa estás (plan único), muestro todas las etapas
-      const rows = PLAN.sprints?.[L]?.rows || [];
-      const row = rows[STAGE[b.id]];
-      items = row ? row[1].map((line, k) => ({ n: line, rx: k === 0 ? `pausa ${row[2].join(" ")}` : "" }))
-        : rows.length ? rows.map((r) => ({ n: `${r[0].join(" ")} · ${r[1].join(" ")}`, rx: /\d/.test(r[2].join("")) ? `pausa ${r[2].join(" ")}` : "" })) : [{ n: w.t }];
+    } else if (!w.off) {
+      // Día atlético: una fila por parte (qué, dosis, pausa)
+      const rows = PLAN.sprints?.days?.[w.d]?.rows || [];
+      items = rows.map((r) => ({ n: (r[0] || []).join(" ").replace(/^\d+\s*·\s*/, ""), rx: (r[2] || [])[0] || "", note: /\d/.test((r[3] || []).join("")) ? `pausa ${r[3].join(" ")}` : "" }));
+      if (!items.length) items = [{ n: w.t }];
       tg = "fisico";
     } else {
-      items = (PLAN.rest?.rows || []).map((r) => ({ n: (r[0][0] || "").replace(/^\d+\s*·\s*/, ""), rx: r[0][1] || "", note: r[1].join(" ") }));
-      if (!items.length) items = [{ n: w.t }];
-      tg = "estiramientos";
+      items = [{ n: w.t }];
+      tg = "general";
     }
-    return { day, letter: L, title: w.t, sub: w.sub || "", tag: tg, items };
+    return { day, letter: L, title: w.t, sub: w.sub || "", tag: tg, items, off: !!w.off, ath: !w.off && !b.s[L], dkey: w.d };
   }).sort((a, c) => a.day - c.day).map((d) => ({ ...d, name: DAY_NAMES[d.day] }));
 }
 
 async function loadPlan73() {
   try {
-    const cached = JSON.parse(lsGet("manuhq-plan73v2") || "null");
+    const cached = JSON.parse(lsGet("manuhq-plan73v3") || "null");
     if (cached) { PLAN = cached; planStatus = "cache"; buildRoutine(); }
   } catch (e) { /* ignorar */ }
   try {
-    const html = await fetch(PLAN73, { cache: "no-cache" }).then((r) => r.text());
+    loadPlan73.at = Date.now();
+    const html = await fetch(PLAN73, { cache: "no-cache" }).then((r) => { if (!r.ok) throw new Error("Plan-73 " + r.status); return r.text(); });
     const doc = new DOMParser().parseFromString(html, "text/html");
     const weekEl = doc.querySelector(".week");
     const week = [...doc.querySelectorAll(".week .day")].map((el) => ({
       d: el.querySelector(".d")?.textContent.trim(),
+      off: el.classList.contains("off"),
       s: el.querySelector(".s")?.textContent.trim(),
       t: (el.querySelector(".t b") || el.querySelector(".t"))?.textContent.trim(),
       sub: el.querySelector(".t b") ? [...el.querySelector(".t").childNodes].filter((n) => n.nodeName !== "B").map((n) => n.textContent).join(" ").replace(/\s+/g, " ").trim() : "",
@@ -253,11 +265,15 @@ async function loadPlan73() {
     const sprints = {};
     if (sp) {
       sp.querySelectorAll(".panel").forEach((p) => {
-        const h = p.querySelector("h3")?.textContent.trim() || "";
-        const m = h.match(/^(S\d)/);
-        if (m) sprints[m[1]] = { title: h, html: clean(p).replace(/^<h4>.*?<\/h4>/, ""), rows: rowsOf(p.querySelector("table")) };
-        else if (/^Reglas/i.test(h)) sprints.rules = clean(p);
+        if (/^Reglas/i.test(p.querySelector("h3")?.textContent.trim() || "")) sprints.rules = clean(p);
       });
+      // Días atléticos: el título de cada uno empieza con el nombre del día ("Miércoles · …")
+      sprints.days = {};
+      week.forEach((w) => {
+        const sec = !w.off && DAY_RE[w.d] && sectionAfter(sp, new RegExp("^" + DAY_RE[w.d], "i"));
+        if (sec) sprints.days[w.d] = sec;
+      });
+      sprints.prep = sectionAfter(sp, /^preparaci/i);
       const warmH = [...sp.querySelectorAll("h3")].find((h) => /calentamiento/i.test(h.textContent));
       if (warmH && warmH.nextElementSibling) sprints.warm = { title: warmH.textContent.trim(), html: clean(warmH.nextElementSibling) };
     }
@@ -266,13 +282,13 @@ async function loadPlan73() {
     let rest = null;
     if (est) {
       const panels = [...est.querySelectorAll(".panel")];
-      const long = panels.find((p) => /sesi[oó]n larga/i.test(p.querySelector("h3")?.textContent || ""));
+      const long = sectionAfter(est, /sesi[oó]n larga/i);
       const passive = panels.find((p) => /descans/i.test(p.querySelector("h3")?.textContent || ""));
       rest = {
-        title: long?.querySelector("h3")?.textContent.trim() || "",
-        html: long ? clean(long).replace(/^<h4>.*?<\/h4>/, "") : "",
-        rows: rowsOf(long?.querySelector("table")),
-        passive: passive ? { title: passive.querySelector("h3").textContent.trim(), html: clean(passive).replace(/^<h4>.*?<\/h4>/, "") } : null,
+        title: long?.title || "",
+        html: long?.html || "",
+        rows: long?.rows || [],
+        passive: passive ? { title: passive.querySelector("h3").textContent.trim(), html: clean(passive).replace(/^\s*<h4>.*?<\/h4>/, "") } : null,
       };
     }
     const updated = doc.querySelector("footer")?.textContent.trim() || "";
@@ -288,7 +304,7 @@ async function loadPlan73() {
     const ex = doc.querySelector("#ejecucion");
     const exec = ex ? Object.fromEntries([["rpe", /escala rpe/i], ["rest", /descansos/i], ["prog", /subir los pesos/i]].map(([k, re]) => {
       const p = [...ex.querySelectorAll(".panel")].find((x) => re.test(x.querySelector("h3")?.textContent || ""));
-      return [k, p ? { title: p.querySelector("h3").textContent.replace(/^\d+\s*·\s*/, "").trim(), html: clean(p).replace(/^<h4>.*?<\/h4>/, "") } : null];
+      return [k, p ? { title: p.querySelector("h3").textContent.replace(/^\d+\s*·\s*/, "").trim(), html: clean(p).replace(/^\s*<h4>.*?<\/h4>/, "") } : null];
     })) : {};
     // Comida (números diarios y control de peso) y objetivos de fuerza
     const secBy = (re) => [...doc.querySelectorAll("section")].find((s) => re.test(s.querySelector("h2")?.textContent || ""));
@@ -304,7 +320,7 @@ async function loadPlan73() {
       blocks: v.blocks.map(({ id, name, weeks, title, intro, s }) => ({ id, name, weeks, title, intro, s })),
     };
     planStatus = "live";
-    lsSet("manuhq-plan73v2", JSON.stringify(PLAN));
+    lsSet("manuhq-plan73v3", JSON.stringify(PLAN));
     buildRoutine();
   } catch (e) {
     console.warn("No pude leer Plan-73; uso la versión guardada.", e);
@@ -316,9 +332,10 @@ async function loadPlan73() {
   else $("#top-sync").innerHTML = syncBadge();
 }
 const isLift = (d) => /^[A-D]$/.test(d.letter);
-const isSprint = (d) => /^S/.test(d.letter);
-const letterOf = (d) => isLift(d) ? d.letter : isSprint(d) ? "S" : "—";
-const sessionName = (d) => `<span class="letter ${isLift(d) ? "" : "plain"}">${isLift(d) ? d.letter : isSprint(d) ? "S" : "·"}</span>${esc(d.title)}`;
+const isSprint = (d) => !!d.ath;
+const isOff = (d) => d.off ?? !(isLift(d) || isSprint(d));
+const letterOf = (d) => isOff(d) ? "—" : d.letter;
+const sessionName = (d) => `<span class="letter ${isLift(d) ? "" : "plain"}">${isOff(d) ? "·" : esc(d.letter)}</span>${esc(d.title)}`;
 const sessionText = (d) => `${isLift(d) ? `${d.letter} · ` : ""}${d.title}${d.sub ? ` (${d.sub})` : ""}`;
 const syncBadge = () => ({
   live: `<span class="sync ok">● Sincronizado con Plan-73</span>`,
@@ -468,7 +485,7 @@ const VIEWS = {
     const hi = hour < 6 ? "Buenas noches" : hour < 12 ? "Buen día" : hour < 20 ? "Buenas tardes" : "Buenas noches";
     const dates = weekDates();
     const gymWeek = new Set(S.logs.gym.filter((l) => dates.includes(l.date)).map((l) => l.date)).size;
-    const trainDays = ROUTINE.filter((r) => isLift(r) || isSprint(r)).length || 6;
+    const trainDays = ROUTINE.filter((r) => !isOff(r)).length || 6;   // el descanso no cuenta
     const dom = Object.values(S.waza).filter((v) => v === 2).length;
     const bestLang = S.langs.map((l) => ({ l, n: streakOf(l.days) })).sort((a, b) => b.n - a.n)[0];
     const active = S.projects.filter((p) => p.status === "Activo");
@@ -547,17 +564,20 @@ const VIEWS = {
           <tbody>${d.items.map((i, n) => `<tr class="${i.key ? "key" : ""}"><td>${String(n + 1).padStart(2, "0")}</td><td class="n">${esc(i.n)}${kindTag(i)}</td><td class="num rx">${esc(i.rx || "")}</td><td class="note">${esc(i.note || "")}</td></tr>`).join("")}</tbody>
         </table></div>
         ${PLAN?.SS?.[d.letter] ? phase(PLAN.SS[d.letter], "str", str.length ? rowList(str.map((z) => [[z[1].join(" ")], z[2], z[0]]), [1, 2]) : "") : ""}`;
-    } else if (isSprint(d) && PLAN?.sprints?.[d.letter]) {
-      const sp = PLAN.sprints[d.letter];
-      const stage = STAGE[b.id] ?? "";   // sin etapa conocida no resalto ninguna fila
+    } else if (isSprint(d) && PLAN?.sprints?.days?.[d.dkey]) {
+      const sp = PLAN.sprints, day = sp.days[d.dkey];
+      const fold = (title, body) => body ? `<details class="more"><summary>${esc(title)}</summary><div class="plan-html">${body}</div></details>` : "";
+      const usesLong = PLAN.rest?.html && /sesi[oó]n larga/i.test(day.html);
       detail = `
-        ${PLAN.sprints.warm ? `<div class="plan-html"><h4>${esc(PLAN.sprints.warm.title)}</h4>${PLAN.sprints.warm.html}</div>` : ""}
-        <div class="plan-html sprint" data-stage="${stage}">${sp.html}</div>
-        ${PLAN.sprints.rules ? `<details class="more"><summary>Reglas de los sprints</summary><div class="plan-html">${PLAN.sprints.rules.replace(/^<h4>.*?<\/h4>/, "")}</div></details>` : ""}`;
-    } else if (PLAN?.rest) {
+        ${fold(sp.warm?.title || "Calentamiento", sp.warm?.html)}
+        ${fold(sp.prep?.title || "Preparación", sp.prep?.html)}
+        <div class="plan-html"><h4>${esc(day.title)}</h4>${day.html}</div>
+        ${usesLong ? fold(PLAN.rest.title, PLAN.rest.html) : ""}
+        ${fold("Reglas de los días atléticos", sp.rules?.replace(/^\s*<h4>.*?<\/h4>/, ""))}`;
+    } else if (isOff(d)) {
       detail = `
-        <div class="plan-html"><h4>${esc(PLAN.rest.title)}</h4>${PLAN.rest.html}</div>
-        ${PLAN.rest.passive ? `<div class="plan-html"><h4>${esc(PLAN.rest.passive.title)}</h4>${PLAN.rest.passive.html}</div>` : ""}`;
+        <p class="muted" style="margin:14px 0 0">Hoy no se entrena.</p>
+        ${PLAN?.rest?.passive ? `<div class="plan-html"><h4>${esc(PLAN.rest.passive.title)}</h4>${PLAN.rest.passive.html}</div>` : ""}`;
     } else {
       detail = exList(d);
     }
@@ -1212,7 +1232,11 @@ $("#sync-disconnect").addEventListener("click", () => {
   if (!confirm("Este dispositivo deja de sincronizar. Los datos quedan acá y en la nube. ¿Seguir?")) return;
   SYNC = {}; lsDel(SYNC_KEY); setSync("off"); $("#sync-dialog").close();
 });
-document.addEventListener("visibilitychange", () => { if (document.hidden) { if (pushT) syncPush(); } else syncNow(); });
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { if (pushT) syncPush(); return; }
+  syncNow();
+  if (Date.now() - (loadPlan73.at || 0) > 5 * 60000) loadPlan73();   // Plan-73 se vuelve a leer al volver a la pestaña
+});
 window.addEventListener("online", syncNow);
 setInterval(() => { if (!document.hidden && !pushT) syncNow(); }, 120000);
 setSync(SYNC.token ? "ok" : "off");
