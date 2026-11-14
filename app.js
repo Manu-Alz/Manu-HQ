@@ -202,7 +202,7 @@ function goals() {
     rate: rate?.v || "0,25–0,4", rateTxt: rate ? `${rate.v} ${rate.l}` : "0,25–0,4 kg por semana",
   };
 }
-const KIND = { key: "principal", rfd: "RFD", plio: "pliometría", iso: "isometría" };
+const KIND = { key: "principal", rfd: "RFD", plio: "pliometría", iso: "isometría", prev: "prevención" };
 const kindTag = (i) => i.kind && KIND[i.kind] ? ` <span class="xk ${i.kind}">${KIND[i.kind]}</span>` : "";
 /* Estiramientos que tocan después de una sesión (según "Cuándo hacer cada cosa") */
 function stretchFor(letter) {
@@ -231,8 +231,8 @@ function routineFor(b) {
       if (!items.length) items = [{ n: w.t }];
       tg = "fisico";
     } else {
-      items = [{ n: w.t }];
-      tg = "general";
+      items = [{ n: w.t, rx: w.sub || "" }];
+      tg = /flexib|movilidad|estir/i.test(w.t) ? "estiramientos" : "general";
     }
     return { day, letter: L, title: w.t, sub: w.sub || "", tag: tg, items, off: !!w.off, ath: !w.off && !b.s[L], dkey: w.d };
   }).sort((a, c) => a.day - c.day).map((d) => ({ ...d, name: DAY_NAMES[d.day] }));
@@ -267,12 +267,6 @@ async function loadPlan73() {
       sp.querySelectorAll(".panel").forEach((p) => {
         if (/^Reglas/i.test(p.querySelector("h3")?.textContent.trim() || "")) sprints.rules = clean(p);
       });
-      // Días atléticos: el título de cada uno empieza con el nombre del día ("Miércoles · …")
-      sprints.days = {};
-      week.forEach((w) => {
-        const sec = !w.off && DAY_RE[w.d] && sectionAfter(sp, new RegExp("^" + DAY_RE[w.d], "i"));
-        if (sec) sprints.days[w.d] = sec;
-      });
       sprints.prep = sectionAfter(sp, /^preparaci/i);
       const warmH = [...sp.querySelectorAll("h3")].find((h) => /calentamiento/i.test(h.textContent));
       if (warmH && warmH.nextElementSibling) sprints.warm = { title: warmH.textContent.trim(), html: clean(warmH.nextElementSibling) };
@@ -282,7 +276,7 @@ async function loadPlan73() {
     let rest = null;
     if (est) {
       const panels = [...est.querySelectorAll(".panel")];
-      const long = sectionAfter(est, /sesi[oó]n larga/i);
+      const long = sectionAfter(est, /sesi[oó]n (larga|base)/i);
       const passive = panels.find((p) => /descans/i.test(p.querySelector("h3")?.textContent || ""));
       rest = {
         title: long?.title || "",
@@ -291,6 +285,13 @@ async function loadPlan73() {
         passive: passive ? { title: passive.querySelector("h3").textContent.trim(), html: clean(passive).replace(/^\s*<h4>.*?<\/h4>/, "") } : null,
       };
     }
+    // Lo propio de cada día: un título que empieza con su nombre ("Miércoles · …", "Domingo · …")
+    sprints.days = {};
+    week.forEach((w) => {
+      const re = DAY_RE[w.d] && new RegExp("^" + DAY_RE[w.d], "i");
+      const sec = re && (sectionAfter(sp, re) || sectionAfter(est, re));
+      if (sec) sprints.days[w.d] = sec;
+    });
     const updated = doc.querySelector("footer")?.textContent.trim() || "";
     // Números de arriba (peso hoy, metas, kg por semana)
     const stats = [...doc.querySelectorAll(".stats .stat")].map((s) => ({ v: s.querySelector("b")?.textContent.trim() || "", l: s.querySelector("span")?.textContent.trim() || "" }));
@@ -334,8 +335,8 @@ async function loadPlan73() {
 const isLift = (d) => /^[A-D]$/.test(d.letter);
 const isSprint = (d) => !!d.ath;
 const isOff = (d) => d.off ?? !(isLift(d) || isSprint(d));
-const letterOf = (d) => isOff(d) ? "—" : d.letter;
-const sessionName = (d) => `<span class="letter ${isLift(d) ? "" : "plain"}">${isOff(d) ? "·" : esc(d.letter)}</span>${esc(d.title)}`;
+const letterOf = (d) => d.letter || "—";
+const sessionName = (d) => `<span class="letter ${isLift(d) ? "" : "plain"}">${/^\w/.test(d.letter || "") ? esc(d.letter) : "·"}</span>${esc(d.title)}`;
 const sessionText = (d) => `${isLift(d) ? `${d.letter} · ` : ""}${d.title}${d.sub ? ` (${d.sub})` : ""}`;
 const syncBadge = () => ({
   live: `<span class="sync ok">● Sincronizado con Plan-73</span>`,
@@ -567,7 +568,7 @@ const VIEWS = {
     } else if (isSprint(d) && PLAN?.sprints?.days?.[d.dkey]) {
       const sp = PLAN.sprints, day = sp.days[d.dkey];
       const fold = (title, body) => body ? `<details class="more"><summary>${esc(title)}</summary><div class="plan-html">${body}</div></details>` : "";
-      const usesLong = PLAN.rest?.html && /sesi[oó]n larga/i.test(day.html);
+      const usesLong = PLAN.rest?.html && /flexib|sesi[oó]n (larga|base)/i.test(day.html + d.sub);
       detail = `
         ${fold(sp.warm?.title || "Calentamiento", sp.warm?.html)}
         ${fold(sp.prep?.title || "Preparación", sp.prep?.html)}
@@ -575,8 +576,13 @@ const VIEWS = {
         ${usesLong ? fold(PLAN.rest.title, PLAN.rest.html) : ""}
         ${fold("Reglas de los días atléticos", sp.rules?.replace(/^\s*<h4>.*?<\/h4>/, ""))}`;
     } else if (isOff(d)) {
+      // Día sin gimnasio: si Plan-73 le pone flexibilidad, muestro la sesión base y lo propio del día
+      const flex = /flexib|movilidad|estir/i.test(d.title + d.sub) && PLAN?.rest?.html;
+      const own = PLAN?.sprints?.days?.[d.dkey];
       detail = `
-        <p class="muted" style="margin:14px 0 0">Hoy no se entrena.</p>
+        ${flex || own ? "" : `<p class="muted" style="margin:14px 0 0">Hoy no se entrena.</p>`}
+        ${flex ? `<div class="plan-html"><h4>${esc(PLAN.rest.title)}</h4>${PLAN.rest.html}</div>` : ""}
+        ${own ? `<div class="plan-html"><h4>${esc(own.title)}</h4>${own.html}</div>` : ""}
         ${PLAN?.rest?.passive ? `<div class="plan-html"><h4>${esc(PLAN.rest.passive.title)}</h4>${PLAN.rest.passive.html}</div>` : ""}`;
     } else {
       detail = exList(d);

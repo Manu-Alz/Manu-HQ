@@ -594,6 +594,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .xk.rfd { color: #a78bff; background: rgba(123,92,255,.12); }
 .xk.plio { color: #8fd6ff; background: rgba(143,214,255,.1); }
 .xk.iso { color: var(--muted); border: 1px solid var(--line-2); }
+.xk.prev { color: var(--green); background: rgba(94,224,160,.1); }
 /* Calentamiento y estiramiento desplegables */
 details.phase-d > summary { list-style: none; cursor: pointer; }
 details.phase-d > summary::-webkit-details-marker { display: none; }
