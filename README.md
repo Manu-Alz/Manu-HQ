@@ -23,6 +23,6 @@ Mi hub personal: rutina de Plan-73, judo, cambio físico, surf, estilo de vida e
 ## Datos
 Todo se guarda en el navegador (localStorage) y sobrevive a recargas.
 
-**Sincronizar dispositivos** (botón en el menú): guarda los datos en un gist secreto de mi GitHub y los mantiene iguales en cada dispositivo conectado. Se conecta una vez por dispositivo con un token de GitHub que solo tenga permiso **Gists: Read and write**. Gana el cambio más nuevo.
+**Sincronizar dispositivos** (botón en el menú): guarda los datos en un gist secreto de mi GitHub y los mantiene iguales en cada dispositivo conectado. Se conecta una vez por dispositivo con un token de GitHub que solo tenga permiso **Gists: Read and write**. Si cambio cosas distintas en dos dispositivos, se juntan.
 
 **Exportar / Importar datos** siguen estando para hacer un backup a mano.

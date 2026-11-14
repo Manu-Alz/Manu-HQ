@@ -1141,7 +1141,8 @@ $("#import-file").addEventListener("change", async (e) => {
    Sincronización entre dispositivos.
    Los datos van a un gist secreto de tu GitHub; cada dispositivo
    se conecta una vez con un token que solo tiene permiso de gists.
-   Gana el cambio más nuevo (S.updatedAt).
+   Si dos dispositivos cambiaron cosas distintas, se juntan: se
+   compara cada uno contra la última versión sincronizada (BASE).
    ========================================================= */
 const SYNC_KEY = "manuhq-sync", SYNC_FILE = "manu-hq-data.json", GH_API = "https://api.github.com";
 let SYNC = (() => { try { return JSON.parse(lsGet(SYNC_KEY)) || {}; } catch (e) { return {}; } })();
@@ -1165,9 +1166,36 @@ async function remoteRead() {
   const data = JSON.parse(f.truncated ? await (await fetch(f.raw_url, { cache: "no-store" })).text() : f.content);
   return data && typeof data === "object" ? data : null;
 }
-function applyRemote(data) {
+/* Última versión que este dispositivo y la nube tuvieron igual */
+const BASE_KEY = "manuhq-base";
+const getBase = () => { try { return JSON.parse(lsGet(BASE_KEY)); } catch (e) { return null; } };
+const setBase = () => lsSet(BASE_KEY, JSON.stringify(S));
+const sameJ = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const isObj = (x) => x && typeof x === "object" && !Array.isArray(x);
+const keyOf = (x) => isObj(x) ? x.id ?? x.date ?? JSON.stringify(x) : x;
+/* Listas: se junta ítem por ítem (b = base, l = este dispositivo, r = nube) */
+function mergeList(b, l, r) {
+  const B = new Map(b.map((x) => [keyOf(x), x])), R = new Map(r.map((x) => [keyOf(x), x])), L = new Set(l.map(keyOf));
+  const mine = l.filter((x) => R.has(keyOf(x)) || !B.has(keyOf(x)))                    // lo que la nube borró, se va
+    .map((x) => { const k = keyOf(x); return B.has(k) && sameJ(x, B.get(k)) ? R.get(k) : x; });   // si acá no lo toqué, vale el de la nube
+  return [...r.filter((x) => !L.has(keyOf(x)) && !B.has(keyOf(x))), ...mine];          // + lo nuevo de la nube
+}
+function mergeAny(b, l, r) {
+  if (Array.isArray(l) && Array.isArray(r)) return mergeList(Array.isArray(b) ? b : [], l, r);
+  if (isObj(l) && isObj(r)) {
+    const o = {}, hasB = (k) => isObj(b) && k in b;
+    for (const k of new Set([...Object.keys(r), ...Object.keys(l)])) {
+      if (k in l && k in r) o[k] = mergeAny(isObj(b) ? b[k] : undefined, l[k], r[k]);
+      else if (k in l) { if (!hasB(k) || !sameJ(l[k], b[k])) o[k] = l[k]; }   // si estaba y no lo toqué, la nube lo borró
+      else if (!hasB(k)) o[k] = r[k];                                          // si estaba, lo borré acá
+    }
+    return o;
+  }
+  return sameJ(l, b) ? r : l;
+}
+function applyRemote(data, keepBase) {
   S = normalize(data);
-  lsSet(STORE_KEY, JSON.stringify(S));
+  lsSet(STORE_KEY, JSON.stringify(S)); if (!keepBase) setBase();
   const a = document.activeElement;   // si estás escribiendo, no te borro el campo: se redibuja con tu próximo cambio
   if (!(a && a.closest("#view") && /INPUT|TEXTAREA/.test(a.tagName) && a.value)) render();
 }
@@ -1175,26 +1203,40 @@ async function syncPush() {
   clearTimeout(pushT); pushT = null;
   if (!SYNC.token || !SYNC.gist) return;
   setSync("busy");
+  const sent = JSON.stringify(S);
   try {
-    await gh("/gists/" + SYNC.gist, { method: "PATCH", body: JSON.stringify({ files: { [SYNC_FILE]: { content: JSON.stringify(S) } } }) });
-    setSync("ok");
+    await gh("/gists/" + SYNC.gist, { method: "PATCH", body: JSON.stringify({ files: { [SYNC_FILE]: { content: sent } } }) });
+    lsSet(BASE_KEY, sent); setSync("ok");
   } catch (e) { syncFail(e); }
 }
 function schedulePush() {
   if (!SYNC.token || !SYNC.gist) return;
-  clearTimeout(pushT); pushT = setTimeout(syncPush, 1500);
+  clearTimeout(pushT); pushT = setTimeout(syncNow, 1500);
 }
-/* Trae lo de la nube si es más nuevo; sube lo de acá si es más nuevo */
+/* Siempre lee la nube antes de escribir. Si cambiaron los dos lados, junta los cambios. */
 async function syncNow() {
-  if (!SYNC.token || !SYNC.gist || syncBusy) return;
+  if (!SYNC.token || !SYNC.gist) return;
+  if (syncBusy) { syncNow.again = true; return; }
+  clearTimeout(pushT); pushT = null;
   syncBusy = true; setSync("busy");
   try {
-    const r = await remoteRead(), rt = (r && r.updatedAt) || 0, lt = S.updatedAt || 0;
-    if (r && rt > lt) { applyRemote(r); setSync("ok"); }
-    else if (lt > rt || !r) await syncPush();
-    else setSync("ok");
+    const r = await remoteRead(), base = getBase();
+    const rt = (r && r.updatedAt) || 0, lt = S.updatedAt || 0, bt = base ? base.updatedAt || 0 : null;
+    if (!r) await syncPush();
+    else if (rt === lt) { if (!base) setBase(); setSync("ok"); }
+    else if (bt === rt) await syncPush();                        // solo cambió este dispositivo
+    else if (bt === lt) { applyRemote(r); setSync("ok"); }       // solo cambió la nube
+    else if (base) {                                             // cambiaron los dos: junto
+      const merged = mergeAny(base, S, r);
+      merged.updatedAt = Date.now();
+      applyRemote(merged, true);                                 // la base se actualiza recién cuando la subida sale bien
+      await syncPush();
+    }
+    else if (rt > lt) { applyRemote(r); setSync("ok"); }         // primera vez sin base: gana el más nuevo
+    else await syncPush();
   } catch (e) { syncFail(e); }
   syncBusy = false;
+  if (syncNow.again) { syncNow.again = false; schedulePush(); }
 }
 const hasLocalData = () => JSON.stringify({ ...S, updatedAt: undefined }) !== JSON.stringify(DEFAULT_STATE);
 async function syncConnect(token) {
@@ -1211,7 +1253,7 @@ async function syncConnect(token) {
     } else {
       S.updatedAt = S.updatedAt || Date.now(); lsSet(STORE_KEY, JSON.stringify(S));
       const g = await gh("/gists", { method: "POST", body: JSON.stringify({ description: "Manu HQ · datos sincronizados", public: false, files: { [SYNC_FILE]: { content: JSON.stringify(S) } } }) });
-      SYNC.gist = g.id; setSync("ok");
+      SYNC.gist = g.id; setBase(); setSync("ok");
     }
     saveSync(); toast("Dispositivo conectado ✓");
     return true;
@@ -1236,10 +1278,10 @@ $("#sync-form").addEventListener("submit", async (e) => {
 $("#sync-now").addEventListener("click", syncNow);
 $("#sync-disconnect").addEventListener("click", () => {
   if (!confirm("Este dispositivo deja de sincronizar. Los datos quedan acá y en la nube. ¿Seguir?")) return;
-  SYNC = {}; lsDel(SYNC_KEY); setSync("off"); $("#sync-dialog").close();
+  SYNC = {}; lsDel(SYNC_KEY); lsDel(BASE_KEY); setSync("off"); $("#sync-dialog").close();
 });
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) { if (pushT) syncPush(); return; }
+  if (document.hidden) { if (pushT) syncNow(); return; }
   syncNow();
   if (Date.now() - (loadPlan73.at || 0) > 5 * 60000) loadPlan73();   // Plan-73 se vuelve a leer al volver a la pestaña
 });
