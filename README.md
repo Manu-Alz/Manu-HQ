@@ -13,6 +13,7 @@ Mi hub personal: rutina de Plan-73, judo, cambio físico, surf, estilo de vida e
 - **Watch list**: películas, series y videos para ver, con tipo y nota o link.
 - **Surf**, **Estilo de vida**, **Estudio**, **Idiomas**, **Proyectos**, **Contenido**, **Ideas**.
 - Cada sección tiene sus propias notas. La barra de arriba guarda ideas desde cualquier página.
+- **Música**: botón arriba, junto al buscador de ideas. Abre un menú flotante con el reproductor de Spotify y mi biblioteca: pego links de playlists, álbumes, artistas o canciones, los ordeno en carpetas y los busco. Al cerrar el menú sigue sonando, con play/pausa y progreso en la barra. Spotify no deja leer mis carpetas desde una página, por eso la biblioteca es propia (se sincroniza como el resto).
 
 ## Archivos
 - `index.html`: estructura, pantalla de entrada y Spotify

@@ -20,7 +20,7 @@
   --amber: #ffc46b;
   --pink: #ff8fc7;
   --radius: 16px;
-  --pl-h: 104px;
+  --pl-h: 0px;
   --side-w: 244px;
   --font: "Geist", system-ui, sans-serif;
   --mono: "Geist Mono", ui-monospace, monospace;
@@ -196,7 +196,7 @@ nav a .ni svg { width: 18px; height: 18px; fill: none; stroke: currentColor; str
   border-bottom: 1px solid var(--line);
 }
 .quick-idea {
-  flex: 1; max-width: 560px; display: flex; align-items: center; gap: 8px;
+  flex: 1 1 200px; min-width: 190px; max-width: 560px; display: flex; align-items: center; gap: 8px;
   background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px 4px 4px 12px;
   transition: border-color .2s, box-shadow .2s;
 }
@@ -209,6 +209,7 @@ nav a .ni svg { width: 18px; height: 18px; fill: none; stroke: currentColor; str
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
 .top-date { font: 400 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
 .only-m { display: none !important; }
+@media (max-width: 1360px) { .top-date { display: none; } }
 
 main { padding: 28px clamp(16px, 3vw, 40px) 48px; width: 100%; max-width: 1640px; }
 
@@ -318,7 +319,7 @@ td.num, th.num { text-align: right; font-family: var(--mono); white-space: nowra
 .toast {
   position: fixed; left: 50%; bottom: calc(var(--pl-h) + 20px); transform: translate(-50%, 20px);
   background: var(--card-3); border: 1px solid var(--line-2); color: var(--text);
-  padding: 10px 16px; border-radius: 12px; font-size: 13px; z-index: 120;
+  padding: 10px 16px; border-radius: 12px; font-size: 13px; z-index: 170;
   opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s;
   box-shadow: 0 10px 30px rgba(0,0,0,.5);
 }
@@ -434,17 +435,89 @@ td.num, th.num { text-align: right; font-family: var(--mono); white-space: nowra
 .project .links { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* ===================================================== */
-/* Spotify flotando                                       */
+/* Música: botón en la barra + menú flotante              */
 /* ===================================================== */
-/* Sin barra: solo el widget de Spotify, flotando unos pixeles arriba del borde */
-.player {
-  position: fixed; left: var(--side-w); right: 0; bottom: 12px; z-index: 100;
-  display: flex; justify-content: center; padding: 0 16px;
-  pointer-events: none; background: none;
+.mini {
+  position: relative; display: flex; align-items: center; flex: 0 1 230px; min-width: 0; overflow: hidden;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 3px 12px 3px 3px;
+  transition: border-color .2s;
 }
-.player > * , .player iframe {
-  pointer-events: auto; display: block; width: 100%; max-width: 760px; height: 80px;
-  border: 0; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.55);
+.mini:hover { border-color: var(--line-2); }
+.mini.on { border-color: rgba(77,124,255,.45); }
+.mini-play { width: 32px; height: 32px; flex: none; border: 0; border-radius: 9px; background: var(--card-3); color: var(--text); cursor: pointer; display: grid; place-items: center; }
+.mini-play:hover { background: var(--accent); color: #fff; }
+.mini-play svg { width: 16px; height: 16px; fill: currentColor; grid-area: 1 / 1; }
+.mini-play .i-pause { display: none; }
+.mini.on .mini-play .i-pause { display: block; }
+.mini.on .mini-play .i-play { display: none; }
+.mini-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 6px 0 6px 10px; border: 0; background: none; color: var(--text); font: inherit; font-size: 13px; cursor: pointer; text-align: left; }
+.mini-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; }
+.mini-bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .9s linear; }
+.eq { display: inline-flex; align-items: flex-end; gap: 2px; width: 14px; height: 12px; flex: none; color: var(--dim); }
+.eq i { flex: 1; height: 35%; background: currentColor; border-radius: 1px; }
+.mini.on .eq, .eq.on { color: var(--accent); }
+.mini.on .eq i, .eq.on i { animation: eq .9s ease-in-out infinite; }
+.eq i:nth-child(2) { animation-delay: -.3s !important; }
+.eq i:nth-child(3) { animation-delay: -.6s !important; }
+@keyframes eq { 0%, 100% { height: 25%; } 50% { height: 100%; } }
+
+.music {
+  position: fixed; inset: 0; z-index: 160; display: grid; place-items: center; padding: 16px;
+  background: rgba(2,3,8,.55); backdrop-filter: blur(3px);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity .18s ease, visibility 0s linear .18s;
+}
+.music.open { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity .18s ease; }
+.music-panel {
+  width: min(680px, 100%); max-height: 88vh; max-height: min(88dvh, 780px); display: flex; flex-direction: column; gap: 12px;
+  background: var(--card); border: 1px solid var(--line-2); border-radius: 20px; padding: 18px;
+  box-shadow: 0 30px 80px rgba(0,0,0,.65); outline: none;
+  transform: translateY(10px) scale(.985); transition: transform .2s ease;
+}
+.music.open .music-panel { transform: none; }
+.music-panel:focus, .music-panel:focus-visible { outline: none; }
+.mm-head { display: flex; align-items: center; gap: 12px; }
+.mm-head h2 { font-size: 20px; }
+.mm-lib { margin-left: auto; font-size: 12.5px; color: var(--muted); }
+.mm-lib:hover { color: var(--text); text-decoration: none; }
+.mm-player { flex: none; height: 152px; border-radius: 14px; overflow: hidden; background: var(--card-2); transition: height .25s ease; }
+.mm-player.tall { height: 352px; }
+.mm-player iframe { display: block; width: 100%; height: 100%; border: 0; }
+.mm-tall { align-self: flex-start; margin-top: -4px; padding: 0; background: none; border: 0; color: var(--muted); font-size: 12px; cursor: pointer; }
+.mm-tall:hover { color: var(--text); }
+.mm-tools { display: flex; gap: 8px; }
+.mm-tools input { flex: 1; min-width: 0; }
+.music [hidden] { display: none !important; }
+.mm-add { display: grid; gap: 8px; }
+.mm-add textarea { resize: vertical; min-height: 64px; }
+.mm-add .inline input { flex: 1; min-width: 0; }
+.mm-chips { margin: 0; }
+.mm-list { list-style: none; margin: 0; padding: 0; flex: 1 1 auto; min-height: 90px; overflow-y: auto; overscroll-behavior: contain; display: grid; gap: 2px; align-content: start; }
+.mm-row { display: flex; align-items: center; gap: 2px; border-radius: 12px; }
+.mm-row:hover { background: var(--card-2); }
+.mm-row.on { background: var(--accent-soft); }
+.mm-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 6px 8px; border: 0; border-radius: 12px; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.mm-cov { width: 44px; height: 44px; flex: none; border-radius: 8px; background: var(--card-3) center / cover no-repeat; }
+.mm-t { flex: 1; min-width: 0; display: grid; }
+.mm-t b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mm-t small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mm-act { flex: none; width: 30px; height: 30px; border: 0; border-radius: 8px; background: none; color: var(--dim); font-size: 13px; cursor: pointer; opacity: 0; }
+.mm-row:hover .mm-act, .mm-act:focus-visible { opacity: 1; }
+@media (hover: none) { .mm-act { opacity: 1; } }
+.mm-act:hover { color: var(--text); background: var(--card-3); }
+.mm-empty, .mm-ext { padding: 12px 8px; color: var(--muted); font-size: 13px; }
+.mm-ext a { color: var(--accent); }
+@media (max-width: 900px) {
+  .mini { flex: 0 0 auto; margin-left: auto; padding-right: 8px; }
+  .mini-title { display: none; }
+  .music { padding: 10px; }
+  .music-panel { padding: 14px; }
+  .mm-player.tall { height: 300px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .music, .music-panel, .mm-player { transition: none; }
+  .eq i { animation: none !important; }
 }
 
 /* ===================================================== */
@@ -512,7 +585,7 @@ details.more summary { cursor: pointer; color: var(--accent); font-size: 13px; f
   .kanban { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 900px) {
-  :root { --side-w: 0px; --pl-h: 100px; }
+  :root { --side-w: 0px; }
   .app { grid-template-columns: 1fr; }
   .sidebar {
     position: fixed; inset: 0 auto 0 0; width: 270px; z-index: 150; height: 100vh;

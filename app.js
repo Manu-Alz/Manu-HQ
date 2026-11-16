@@ -88,6 +88,7 @@ const DEFAULT_STATE = {
   langs: [],
   buy: [],
   watch: [],
+  music: [{ id: "m-default", uri: PLAYLIST, kind: "playlist", name: "Lost Men", img: "", folder: "", date: "" }],
 };
 
 /* ---------- Niveles de idiomas ---------- */
@@ -108,7 +109,7 @@ function normalize(data) {
   const s = { ...structuredClone(DEFAULT_STATE), ...data };
   s.logs = { ...DEFAULT_STATE.logs, ...s.logs };
   for (const k of ["waza", "notes"]) s[k] = s[k] || {};
-  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "places", "langs", "buy", "watch"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
+  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "places", "langs", "buy", "watch", "music"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
   // Las notas libres viejas de Uruguay pasan a la lista de notas (una sola vez)
   if (s.uyNotes) { (s.notes.uruguay = s.notes.uruguay || []).unshift({ id: uid(), text: s.uyNotes, date: today() }); }
   s.langs.forEach(fixLang);
@@ -1198,6 +1199,7 @@ function applyRemote(data, keepBase) {
   lsSet(STORE_KEY, JSON.stringify(S)); if (!keepBase) setBase();
   const a = document.activeElement;   // si estás escribiendo, no te borro el campo: se redibuja con tu próximo cambio
   if (!(a && a.closest("#view") && /INPUT|TEXTAREA/.test(a.tagName) && a.value)) render();
+  renderMusic();
 }
 async function syncPush() {
   clearTimeout(pushT); pushT = null;
@@ -1238,7 +1240,10 @@ async function syncNow() {
   syncBusy = false;
   if (syncNow.again) { syncNow.again = false; schedulePush(); }
 }
-const hasLocalData = () => JSON.stringify({ ...S, updatedAt: undefined }) !== JSON.stringify(DEFAULT_STATE);
+const hasLocalData = () => {   // los nombres y portadas de música se completan solos: no cuentan como datos tuyos
+  const bare = (s) => JSON.stringify({ ...s, updatedAt: undefined, music: (s.music || []).map(({ name, img, ...r }) => r) });
+  return bare(S) !== bare(DEFAULT_STATE);
+};
 async function syncConnect(token) {
   SYNC = { token };
   setSync("busy");
@@ -1297,29 +1302,168 @@ document.addEventListener("click", (e) => {
 });
 
 /* =========================================================
-   Música: reproductor de Spotify embebido, en modo oscuro,
-   fijo abajo. Funciona con la cuenta gratis.
+   Música: botón en la barra de arriba + menú flotante.
+   Hay un solo reproductor de Spotify (embed: anda con la cuenta
+   gratis) que vive siempre dentro del menú. Al cerrarlo solo se
+   oculta, no se recarga, así que sigue sonando.
+   La biblioteca es mía: pego links y los ordeno en carpetas
+   (Spotify no deja leer las carpetas de nadie).
    ========================================================= */
+var musicReady = false;
+const MUSIC_LAST = "manuhq-lastmusic";   // qué sonaba en este dispositivo (no se sincroniza)
+const KIND_ES = { playlist: "Playlist", album: "Álbum", artist: "Artista", track: "Canción", show: "Podcast", episode: "Episodio" };
+const SPOTIFY_RE = /(?:open\.spotify\.com\/(?:intl-[a-z-]+\/)?(?:embed\/)?|spotify:)(playlist|album|artist|track|show|episode)[\/:]([A-Za-z0-9]{22})/g;
+const spotifyLinks = (txt) => [...String(txt).matchAll(SPOTIFY_RE)].map((m) => ({ kind: m[1], uri: `spotify:${m[1]}:${m[2]}` }));
+const plain = (s) => String(s).toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
+const musicFolders = () => [...new Set(S.music.map((x) => x.folder).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
+
 let wantPlay = false, embedCtl = null, isPlaying = false;
+let nowM = (() => { try { return JSON.parse(lsGet(MUSIC_LAST)); } catch (e) { return null; } })();
+if (!nowM || !/^spotify:\w+:[A-Za-z0-9]{22}$/.test(nowM.uri || "")) nowM = { uri: PLAYLIST };
+const mq = { q: "", folder: "" };         // búsqueda y carpeta elegida ("" = todas, "@sin" = sin carpeta)
+const nowName = () => S.music.find((x) => x.uri === nowM.uri)?.name || "";
+
 /* Reintenta el play: si entrás mientras el reproductor todavía carga, la primera orden se puede perder */
 function tryPlay(n = 25) {
   if (isPlaying || !wantPlay) return;
   if (embedCtl) embedCtl.play();
   if (n > 0) setTimeout(() => tryPlay(n - 1), 1200);
 }
+function updateMini() {
+  $("#mini").classList.toggle("on", isPlaying);
+  $("#mini-title").textContent = nowName() || "Música";
+  $("#mini-open").title = nowName();
+  $("#mini-play").setAttribute("aria-label", isPlaying ? "Pausar" : "Reproducir");
+}
+function playUri(uri) {
+  if (uri === nowM.uri && embedCtl) { wantPlay = false; embedCtl.togglePlay(); return; }   // el mismo: pausa o sigue
+  nowM = { uri }; lsSet(MUSIC_LAST, JSON.stringify(nowM));
+  isPlaying = false; wantPlay = true;
+  updateMini(); renderMusic();
+  if (embedCtl) { embedCtl.loadUri(uri); tryPlay(); }
+}
+
+/* Nombre y portada de cada link, desde el oEmbed público de Spotify (no pide cuenta ni token) */
+const enriched = new Set();
+async function enrich(it) {
+  if (enriched.has(it.id) || (it.name && it.img)) return;
+  enriched.add(it.id);
+  try {
+    const r = await fetch("https://open.spotify.com/oembed?url=" + encodeURIComponent(`https://open.spotify.com/${it.kind}/${it.uri.split(":")[2]}`));
+    const x = S.music.find((m) => m.id === it.id); if (!x) return;
+    if (r.status === 404) { x.name = x.name || "Link no encontrado"; }
+    else { const j = await r.json(); x.name = x.name || j.title || ""; x.img = j.thumbnail_url || ""; }
+    save(); renderMusic(); updateMini();
+  } catch (e) { /* sin conexión: queda para la próxima vez que abras el menú */ }
+}
+
+function renderMusic() {
+  if (!musicReady) return;
+  const folders = musicFolders();
+  if (mq.folder && mq.folder !== "@sin" && !folders.includes(mq.folder)) mq.folder = "";
+  const nSin = S.music.filter((x) => !x.folder).length;
+  const chip = (id, label, n) => `<button class="chip ${mq.folder === id ? "on" : ""}" type="button" data-m="folder" data-f="${esc(id)}">${esc(label)}<span class="muted small mono">${n}</span></button>`;
+  $("#mm-chips").hidden = !folders.length;
+  $("#mm-chips").innerHTML = folders.length ? chip("", "Todas", S.music.length) + folders.map((f) => chip(f, f, S.music.filter((x) => x.folder === f).length)).join("") + (nSin ? chip("@sin", "Sin carpeta", nSin) : "") : "";
+  $("#mm-folders").innerHTML = folders.map((f) => `<option value="${esc(f)}"></option>`).join("");
+  const terms = plain(mq.q).split(/\s+/).filter(Boolean);
+  const list = S.music.filter((x) => (!mq.folder || (mq.folder === "@sin" ? !x.folder : x.folder === mq.folder)) && terms.every((t) => plain(`${x.name} ${x.folder} ${KIND_ES[x.kind]}`).includes(t)));
+  const row = (x) => `<li class="mm-row ${x.uri === nowM.uri ? "on" : ""}">
+    <button class="mm-main" type="button" data-m="play" data-id="${x.id}">
+      <span class="mm-cov" ${x.img ? `style="background-image:url('${esc(x.img)}')"` : ""}></span>
+      <span class="mm-t"><b>${esc(x.name || "Cargando…")}</b><small>${KIND_ES[x.kind]}${x.folder ? ` · ${esc(x.folder)}` : ""}</small></span>
+      ${x.uri === nowM.uri && isPlaying ? `<span class="eq on" aria-hidden="true"><i></i><i></i><i></i></span>` : ""}
+    </button>
+    <button class="mm-act" type="button" data-m="move" data-id="${x.id}" title="Cambiar de carpeta" aria-label="Cambiar de carpeta">✎</button>
+    <button class="mm-act" type="button" data-m="del" data-id="${x.id}" title="Quitar de la lista" aria-label="Quitar">✕</button></li>`;
+  const q = mq.q.trim();
+  $("#mm-list").innerHTML = (list.map(row).join("") || `<li class="mm-empty">${S.music.length ? "No hay nada con ese filtro." : "Todavía no agregaste nada. Tocá ＋ Agregar y pegá links de Spotify."}</li>`)
+    + (q ? `<li class="mm-ext"><a href="https://open.spotify.com/search/${encodeURIComponent(q)}" target="_blank" rel="noopener">Buscar «${esc(q)}» en Spotify ↗</a></li>` : "");
+}
+
+const musicEl = $("#music");
+const musicOpen = () => musicEl.classList.contains("open");
+let musicFocus = null;
+function openMusic() {
+  musicFocus = document.activeElement;
+  musicEl.classList.add("open"); musicEl.setAttribute("aria-hidden", "false");
+  $("#mini-open").setAttribute("aria-expanded", "true");
+  renderMusic();
+  S.music.forEach(enrich);
+  $(".music-panel").focus({ preventScroll: true });
+}
+function closeMusic() {
+  musicEl.classList.remove("open"); musicEl.setAttribute("aria-hidden", "true");
+  $("#mini-open").setAttribute("aria-expanded", "false");
+  (musicFocus && musicFocus.isConnected ? musicFocus : $("#mini-open")).focus({ preventScroll: true });
+}
+$("#mini-open").addEventListener("click", () => (musicOpen() ? closeMusic() : openMusic()));
+$("#mini-play").addEventListener("click", () => {
+  if (!embedCtl) { toast("Cargando el reproductor…"); return; }
+  wantPlay = false; embedCtl.togglePlay();
+});
+$("#mm-close").addEventListener("click", closeMusic);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && musicOpen()) closeMusic(); });
+$("#mm-tall").addEventListener("click", () => {
+  const t = $("#mm-player").classList.toggle("tall");
+  $("#mm-tall").textContent = t ? "Ocultar canciones ▴" : "Ver canciones ▾";
+});
+$("#mm-q").addEventListener("input", (e) => { mq.q = e.target.value; renderMusic(); });
+$("#mm-add-btn").addEventListener("click", () => {
+  const f = $("#mm-add"); f.hidden = !f.hidden;
+  if (!f.hidden) f.links.focus();
+});
+$("#mm-add").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const f = e.target, found = spotifyLinks(f.links.value);
+  if (!found.length) { toast("No encontré links de Spotify"); return; }
+  const folder = f.folder.value.trim().slice(0, 40), have = new Set(S.music.map((x) => x.uri)), added = [];
+  let dup = 0;
+  for (const l of found) {
+    if (have.has(l.uri)) { dup++; continue; }
+    have.add(l.uri);
+    added.push({ id: uid(), uri: l.uri, kind: l.kind, name: "", img: "", folder, date: today() });
+  }
+  S.music.unshift(...added); save();
+  f.reset(); f.hidden = true;
+  toast(`${added.length} agregado${added.length === 1 ? "" : "s"}${dup ? ` · ${dup} ya estaba${dup === 1 ? "" : "n"}` : ""}`);
+  renderMusic(); added.forEach(enrich);
+});
+musicEl.addEventListener("click", (e) => {
+  if (e.target === musicEl) { closeMusic(); return; }   // clic en lo opaco de atrás
+  const b = e.target.closest("[data-m]"); if (!b) return;
+  const x = S.music.find((m) => m.id === b.dataset.id);
+  switch (b.dataset.m) {
+    case "folder": mq.folder = b.dataset.f; renderMusic(); break;
+    case "play": if (x) playUri(x.uri); break;
+    case "move": {
+      if (!x) break;
+      const ex = musicFolders(), v = prompt(`Carpeta para «${x.name || "este link"}»${ex.length ? `\nExistentes: ${ex.join(", ")}` : ""}\n(vacío = sin carpeta)`, x.folder || "");
+      if (v === null) break;
+      x.folder = v.trim().slice(0, 40); save(); renderMusic(); break;
+    }
+    case "del": if (x) { S.music = S.music.filter((m) => m.id !== x.id); save(); renderMusic(); updateMini(); toast("Quitado de la lista"); } break;
+  }
+});
 
 function initMusic() {
   window.onSpotifyIframeApiReady = (IFrameAPI) => {
-    IFrameAPI.createController($("#pl-embed"), { uri: PLAYLIST, width: "100%", height: 80, theme: "dark" }, (ctrl) => {
+    const first = nowM.uri;
+    IFrameAPI.createController($("#pl-embed"), { uri: first, width: "100%", height: 152, theme: "dark" }, (ctrl) => {
       embedCtl = ctrl;
+      if (nowM.uri !== first) ctrl.loadUri(nowM.uri);   // elegiste otra cosa mientras cargaba
       ctrl.addListener("ready", () => tryPlay());
       ctrl.addListener("playback_update", (e) => {
-        const playing = !e.data.isPaused; isPlaying = playing;
-        if (playing) wantPlay = false;   // ya arrancó: no volver a forzar el play si después pausás
+        const d = e.data, was = isPlaying;
+        isPlaying = !d.isPaused;
+        if (isPlaying) wantPlay = false;   // ya arrancó: no volver a forzar el play si después pausás
+        $("#mini-prog").style.width = d.duration ? Math.min(100, (d.position / d.duration) * 100) + "%" : "0%";
+        if (was !== isPlaying) { updateMini(); if (musicOpen()) renderMusic(); }
       });
     });
   };
   const s = document.createElement("script"); s.src = "https://open.spotify.com/embed/iframe-api/v1"; s.async = true; document.head.appendChild(s);
+  musicReady = true; updateMini(); renderMusic();
 }
 
 
