@@ -19,13 +19,15 @@ const fmtDate = (d) => d ? new Date(d + "T12:00:00").toLocaleDateString("es-UY",
 const lsGet = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* sin storage */ } };
 const lsDel = (k) => { try { localStorage.removeItem(k); } catch (e) { /* sin storage */ } };
-function weekDates() {             // lunes → domingo de esta semana
-  const d = new Date(); const off = (d.getDay() + 6) % 7;
-  d.setDate(d.getDate() - off);
+function weekDates(off = 0) {      // lunes → domingo; off = semanas hacia atrás (0 = esta semana, -1 = la pasada…)
+  const d = new Date(); const dif = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - dif + off * 7);
   return [...Array(7)].map((_, i) => { const x = new Date(d); x.setDate(d.getDate() + i); return iso(x); });
 }
 function toast(msg) {
-  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  const t = $("#toast"), pop = $("#pop"), host = pop && pop.open ? pop : document.body;   // si hay un popup abierto, el aviso va adentro para que se vea
+  if (t.parentNode !== host) host.appendChild(t);
+  t.textContent = msg; t.classList.add("show");
   clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 2200);
 }
 
@@ -45,6 +47,7 @@ const ICONS = {
   judo: "M3 9h18v4H3zM10 13l-2.5 8M14 13l2.5 8M12 3v6",
   fisico: "M3 3v18h18M7 15l4-4 3 3 5-6",
   surf: "M2 8c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 13c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 18c2-2 4-2 6 0s4 2 6 0 4-2 6 0",
+  calendario: "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
   comida: "M7 2v7a2 2 0 0 0 4 0V2M9 9v13M17 22V2c-2.5 1.5-4 4-4 8v4h4",
   habitos: "M22 11.1V12a10 10 0 1 1-5.9-9.1M22 4L12 14l-3-3",
   estudio: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5zM4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5",
@@ -58,7 +61,7 @@ const ICONS = {
 const NAV = [
   { group: null, items: [["inicio", "Inicio"]] },
   { group: "Cuerpo", items: [["rutina", "Rutina / Gym"], ["comida", "Comida"], ["judo", "Judo"], ["fisico", "Cambio físico"], ["surf", "Surf"]] },
-  { group: "Vida", items: [["habitos", "Hábitos"], ["estudio", "Estudio"], ["idiomas", "Idiomas"], ["compras", "Compras"], ["watch", "Watch list"]] },
+  { group: "Vida", items: [["calendario", "Calendario"], ["habitos", "Hábitos"], ["estudio", "Estudio"], ["idiomas", "Idiomas"], ["compras", "Compras"], ["watch", "Watch list"]] },
   { group: "Trabajo", items: [["proyectos", "Proyectos"], ["contenido", "Contenido"], ["ideas", "Ideas"]] },
 ];
 
@@ -355,7 +358,7 @@ async function loadPlan73() {
   updateSplash();
   // Redibujo solo si la vista usa el plan y no estás escribiendo algo (para no borrarte el texto)
   const typing = document.activeElement?.matches("input, textarea, select");
-  if (["inicio", "rutina", "fisico", "comida", "habitos"].includes(route()) && !typing) render();
+  if (["inicio", "rutina", "fisico", "comida", "habitos", "calendario"].includes(route()) && !typing) render();
   else $("#top-sync").innerHTML = syncBadge();
 }
 const isLift = (d) => /^[A-D]$/.test(d.letter);
@@ -384,6 +387,7 @@ function tasksCard(area, title = "Pendientes", cls = "") {
     <form class="inline" data-form="task" data-area="${area || ""}">
       <input name="text" placeholder="Nueva tarea…" required />
       ${area ? "" : `<select name="area" style="flex:0 1 140px">${TASK_AREAS.map((k) => `<option value="${k}">${LABELS[k]}</option>`).join("")}</select>`}
+      <input name="due" type="date" title="Fecha (opcional)" aria-label="Fecha (opcional)" style="flex:0 1 145px" />
       <button class="btn btn-primary">Agregar</button>
     </form>
     <ul class="list" style="margin-top:12px">
@@ -391,6 +395,7 @@ function tasksCard(area, title = "Pendientes", cls = "") {
         <li class="${t.done ? "done" : ""}">
           <input type="checkbox" data-act="toggle-task" data-id="${t.id}" ${t.done ? "checked" : ""} />
           <span class="grow">${esc(t.text)}</span>
+          ${t.due ? `<span class="small mono due ${!t.done && t.due < today() ? "late" : ""}" title="Fecha">${fmtDate(t.due)}</span>` : ""}
           ${area ? "" : tag(t.area)}
           <button class="del" data-act="del-task" data-id="${t.id}" title="Borrar">✕</button>
         </li>`).join("") || `<li class="empty" style="background:none">Nada pendiente.</li>`}
@@ -467,18 +472,116 @@ function weightChart() {
 function exList(d) {
   return `<ol class="ex-grid">${d.items.map((i) => `<li class="${i.key ? "key" : ""}"><span class="n">${esc(i.n)}${i.kind && i.kind !== "key" ? kindTag(i) : ""}</span>${i.rx ? `<span class="rx">${esc(i.rx)}</span>` : ""}</li>`).join("")}</ol>`;
 }
-function weekStrip(selDay, clickable, R = ROUTINE) {
-  const dates = weekDates();
-  return `<div class="weekstrip">${[1, 2, 3, 4, 5, 6, 0].map((dow, i) => {
-    const d = R[dow];
-    const done = S.logs.gym.some((l) => l.date === dates[i]);
-    const isToday = dow === new Date().getDay();
-    return `<button class="wd ${isToday ? "today" : ""} ${selDay === dow ? "sel" : ""}" ${clickable ? `data-act="sel-day" data-day="${dow}"` : `data-act="goto-rutina" data-day="${dow}"`}>
-      <span class="dn">${DAY_SHORT[dow]} ${done ? `<span class="ok">✓</span>` : isToday ? `<span class="now"></span>` : ""}</span>
-      <span class="lt">${letterOf(d)}</span>
-      <span class="dt">${esc(d.title)}${d.sub ? `<br><span class="muted">${esc(d.sub)}</span>` : ""}</span>
-    </button>`;
-  }).join("")}</div>`;
+/* ---------- Ventana flotante (popup): una sola, reutilizable ---------- */
+let popFn = null;
+function openPop(title, fn, cls = "") {
+  popFn = fn;
+  const dlg = $("#pop");
+  dlg.className = "dlg pop " + cls;
+  $("#pop-title").textContent = title;
+  $("#pop-body").innerHTML = fn();
+  if (!dlg.open) dlg.showModal();
+  $("#pop-body").scrollTop = 0;
+}
+function refreshPop() {   // si hay un popup abierto lo redibuja (por ejemplo, después de marcar un día)
+  if (!popFn || !$("#pop").open) return;
+  const b = $("#pop-body"), y = b.scrollTop;
+  b.innerHTML = popFn(); b.scrollTop = y;
+}
+
+/* ---------- Calendario de entreno: la semana en fila, de lunes a domingo ---------- */
+let weekOff = 0;                     // semana que miro (0 = esta, -1 = la pasada…). No se puede ir hacia adelante.
+let calMonth = null, calSel = null;  // Calendario general: mes (YYYY-MM) y día elegido (null = hoy)
+const gymDone = (date) => S.logs.gym.some((l) => l.date === date);
+const dateLong = (d) => { const s = new Date(d + "T12:00:00").toLocaleDateString("es-UY", { weekday: "long", day: "numeric", month: "long" }); return s.charAt(0).toUpperCase() + s.slice(1); };
+const rangeLabel = (dates) => {
+  const a = new Date(dates[0] + "T12:00:00"), b = new Date(dates[6] + "T12:00:00"), m = (d) => d.toLocaleDateString("es-UY", { month: "long" }).toLowerCase();
+  return a.getMonth() === b.getMonth() ? `${a.getDate()} al ${b.getDate()} de ${m(b)}` : `${a.getDate()} de ${m(a)} al ${b.getDate()} de ${m(b)}`;
+};
+function gymCal({ sel = null, R = ROUTINE, pop = false, mark = true, nav = true, go = false, head = true } = {}) {
+  const dates = weekDates(nav ? weekOff : 0), t = today(), days = [1, 2, 3, 4, 5, 6, 0];
+  const nDone = dates.filter((dt, i) => gymDone(dt) && !isOff(R[days[i]])).length;
+  const nTrain = days.filter((dow) => !isOff(R[dow])).length || 6;
+  const title = !nav || weekOff === 0 ? "Esta semana" : weekOff === -1 ? "Semana pasada" : "Semana del " + rangeLabel(dates);
+  return `<div class="gcal">
+    ${head ? `<div class="gcal-head">
+      ${nav ? `<button class="hnav" type="button" data-act="week-nav" data-dir="-1" aria-label="Semana anterior" title="Semana anterior">‹</button>` : ""}
+      <div class="gcal-t"><b>${title}</b><span class="muted">${rangeLabel(dates)} · ${nDone} de ${nTrain} entrenos hechos</span></div>
+      ${nav && weekOff < 0 ? `<button class="btn btn-sm btn-ghost" type="button" data-act="week-nav" data-dir="0">Ir a hoy</button>` : ""}
+      ${nav ? `<button class="hnav" type="button" data-act="week-nav" data-dir="1" aria-label="Semana siguiente" title="Semana siguiente" ${weekOff >= 0 ? "disabled" : ""}>›</button>` : ""}
+    </div>` : ""}
+    <div class="weekstrip ${pop ? "in-pop" : ""}">${days.map((dow, i) => {
+      const d = R[dow], date = dates[i], done = gymDone(date), future = date > t, off = isOff(d), isToday = date === t;
+      const label = `${done ? "Quitar la marca de hecho" : "Marcar como hecho"}: ${d.title}, ${DAY_NAMES[dow]} ${+date.slice(8)}`;
+      return `<div class="wd ${isToday ? "today" : ""} ${sel === dow ? "sel" : ""} ${done ? "done" : ""} ${future ? "fut" : ""}">
+        <button class="wd-main" type="button" ${go ? `data-act="goto-rutina" data-day="${dow}"` : `data-act="sel-day" data-day="${dow}"`}>
+          <span class="dn">${DAY_SHORT[dow]} <b>${+date.slice(8)}</b>${isToday ? `<i class="hoy">hoy</i>` : ""}</span>
+          <span class="lt">${letterOf(d)}</span>
+          <span class="dt">${esc(d.title)}${d.sub ? `<br><span class="muted">${esc(d.sub)}</span>` : ""}</span>
+        </button>
+        ${mark && !off && !future ? `<button class="wd-ck ${done ? "on" : ""}" type="button" data-act="gym-day" data-date="${date}" aria-pressed="${done}" title="${esc(label)}" aria-label="${esc(label)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></button>` : ""}
+        ${!mark && done ? `<span class="ok">✓</span>` : ""}
+      </div>`;
+    }).join("")}</div>
+    ${mark ? `<p class="gcal-help">Tocá el círculo de un día para marcarlo como hecho. Con ‹ volvés a las semanas anteriores si te olvidaste de marcar.</p>` : ""}
+  </div>`;
+}
+
+/* ---------- Recetas: salen de "Opciones para elegir" de Plan-73 ---------- */
+const plainTxt = (s) => String(s).toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/\(.*?\)/g, " ").replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+const fmtNums = (s) => { const m = String(s).match(/(\d[\d.]*)\s*(?:kcal)?\s*·\s*(\d+)\s*g/i); return m ? `${m[1]} kcal · ${m[2]} g de proteína` : String(s); };
+const splitItems = (t) => String(t).replace(/\([^)]*\)/g, (m) => m.replace(/,/g, "\u0001")).split(/,\s+/)
+  .flatMap((c) => c.split(/\s+y\s+(?=(?:un|una|\d))/)).map((x) => x.replace(/\u0001/g, ",").trim()).filter(Boolean);
+function recipes() {
+  const out = [];
+  (PLAN?.nutrition?.options || []).forEach((g, gi) => g.rows.forEach((r, ri) => {
+    const name = (r[0] || []).join(" ").trim();
+    out.push({ gi, ri, group: g.title, note: g.note, name, key: plainTxt(name), text: (r[1] || []).join(" ").trim(), nums: (r[2] || []).join(" ").trim() });
+  }));
+  return out;
+}
+/* Busca la receta de un plato del menú ("Desayuno clásico" → Desayunos / Clásico) */
+function findRecipe(dish) {
+  const d = plainTxt(dish), d2 = d.replace(/^(desayuno|batido)( de)? /, ""), list = recipes();
+  return list.find((r) => r.key === d || r.key === d2)
+    || list.filter((r) => r.key.length >= 5 && (d.startsWith(r.key) || d2.startsWith(r.key))).sort((a, b) => b.key.length - a.key.length)[0] || null;
+}
+/* Separa lo que dice Plan-73 en ingredientes, pasos y notas */
+function recipeParts(rec) {
+  let text = rec.text, base = [];
+  const same = /^el mismo,?\s+m[aá]s\s+/i;
+  if (same.test(text) && rec.ri > 0) {   // "El mismo, más …": parte de la receta anterior
+    const prev = recipes().find((r) => r.gi === rec.gi && r.ri === rec.ri - 1);
+    if (prev) { base = recipeParts(prev).items; text = "Más " + text.replace(same, ""); }
+  }
+  const sent = text.split(/(?<=[.!])\s+(?=[A-ZÁÉÍÓÚ¡])/), first = sent[0].replace(/\.$/, "");
+  if (/^(licu|dej|hac|cocin|cort|mezcl|bat|fre|pas)/i.test(first) || first.includes(";")) return { items: [], steps: sent, notes: [] };
+  return { items: /^más /i.test(first) ? [...base, first] : splitItems(first), steps: [], notes: sent.slice(1) };
+}
+const liList = (a) => a.map((x) => `<li>${esc(x)}</li>`).join("");
+function recipeHTML({ nums, slot, rec, text }) {
+  const p = rec ? recipeParts(rec) : { items: splitItems(text), steps: [], notes: [] };
+  if (rec && !p.steps.length && !rec.name.includes("(") && plainTxt(text).startsWith(rec.key + " ")) {   // el menú agrega algo a la receta ("… y un vaso de leche")
+    const extra = text.slice(rec.name.length).trim().replace(/^y\s+/i, "");
+    if (extra) p.items = [...p.items, extra.charAt(0).toUpperCase() + extra.slice(1)];
+  }
+  const notes = [...p.notes, ...(rec?.note ? [rec.note] : [])];
+  return `
+    <div class="rc-top">${nums ? `<span class="rc-n">${esc(fmtNums(nums))}</span>` : ""}${slot ? `<span class="muted">${esc(slot)}</span>` : ""}</div>
+    ${p.steps.length ? `<h4>Cómo se hace</h4><ol class="rc-steps">${liList(p.steps)}</ol>` : `<h4>Qué lleva</h4><ul class="rc-ing">${liList(p.items)}</ul>`}
+    ${notes.length ? `<h4>Para tener en cuenta</h4>${notes.map((n) => `<p class="rc-note">${esc(n)}</p>`).join("")}` : ""}
+    <p class="rc-src">${rec ? `Receta de «${esc(rec.group)}» en Plan-73.` : "Esto es lo que dice Plan-73 para esta comida."}</p>`;
+}
+function groupHTML(gi) {
+  const g = PLAN?.nutrition?.options?.[gi];
+  if (!g) return "";
+  return `${g.note ? `<p class="rc-note">${esc(g.note)}</p>` : ""}
+    <div class="rc-list">${recipes().filter((r) => r.gi === gi).map((r) => {
+      const p = recipeParts(r);
+      return `<article class="rc-card"><div class="rc-h"><b>${esc(r.name)}</b><span class="mono">${esc(r.nums)}</span></div>
+        ${p.steps.length ? `<ol class="rc-steps">${liList(p.steps)}</ol>` : `<ul class="rc-ing">${liList(p.items)}</ul>`}
+        ${p.notes.map((n) => `<p class="rc-note small">${esc(n)}</p>`).join("")}</article>`;
+    }).join("")}</div>`;
 }
 
 /* =========================================================
@@ -520,7 +623,7 @@ const VIEWS = {
     const hour = new Date().getHours();
     const hi = hour < 6 ? "Buenas noches" : hour < 12 ? "Buen día" : hour < 20 ? "Buenas tardes" : "Buenas noches";
     const dates = weekDates();
-    const gymWeek = new Set(S.logs.gym.filter((l) => dates.includes(l.date)).map((l) => l.date)).size;
+    const gymWeek = dates.filter((dt, i) => gymDone(dt) && !isOff(ROUTINE[[1, 2, 3, 4, 5, 6, 0][i]])).length;
     const trainDays = ROUTINE.filter((r) => !isOff(r)).length || 6;   // el descanso no cuenta
     const dom = Object.values(S.waza).filter((v) => v === 2).length;
     const bestLang = S.langs.map((l) => ({ l, n: streakOf(l.days) })).sort((a, b) => b.n - a.n)[0];
@@ -547,7 +650,7 @@ const VIEWS = {
       <div class="c-4 side stack">
         <div class="kpis">
           <a class="kpi" href="#fisico"><span class="label-sm">Peso</span><div class="v">${nowKg ?? "—"}<small>kg</small></div><div class="d">meta ${esc(G.walkingTxt)} caminando</div><div class="bar"><i style="width:${pct}%"></i></div></a>
-          <a class="kpi" href="#rutina"><span class="label-sm">Semana</span><div class="v">${gymWeek}<small>/ ${trainDays}</small></div><div class="d">días de entreno hechos</div><div class="bar"><i style="width:${Math.min(100, (gymWeek / trainDays) * 100)}%"></i></div></a>
+          <button class="kpi" type="button" data-act="open-cal" title="Abrir el calendario para ver y marcar días"><span class="label-sm">Semana</span><div class="v">${gymWeek}<small>/ ${trainDays}</small></div><div class="d">días de entreno · tocá para marcar</div><div class="bar"><i style="width:${Math.min(100, (gymWeek / trainDays) * 100)}%"></i></div></button>
           <a class="kpi" href="#judo"><span class="label-sm">Técnicas</span><div class="v">${dom}<small>/ 100</small></div><div class="d">dominadas</div><div class="bar"><i style="width:${dom}%"></i></div></a>
           <a class="kpi" href="#idiomas"><span class="label-sm">Idiomas</span><div class="v">${bestLang ? bestLang.n : "—"}${bestLang ? "<small>días</small>" : ""}</div><div class="d">${bestLang ? `racha en ${esc(bestLang.l.name)}` : "agregá un idioma"}</div></a>
         </div>
@@ -558,7 +661,7 @@ const VIEWS = {
         </div>
       </div>
     </div>
-    <div class="bento"><div class="c-12">${weekStrip(null, false)}</div></div>
+    <div class="bento"><div class="c-12">${gymCal({ mark: false, nav: false, go: true, head: false })}</div></div>
     <div class="bento">
       ${tasksCard(null, "Tareas", "c-5")}
       <div class="card c-4">
@@ -587,6 +690,7 @@ const VIEWS = {
     // Si estás mirando otro bloque, armo la semana con ese bloque
     const R = (b && cur && b.id !== cur.id && routineFor(b)) || ROUTINE;
     const d = R[selDay];
+    const selDate = weekDates(weekOff)[[1, 2, 3, 4, 5, 6, 0].indexOf(selDay)], selDone = gymDone(selDate), selFuture = selDate > today();
     let detail = "";
     if (isLift(d)) {
       const warm = PLAN?.stretch?.warm || [];
@@ -626,12 +730,12 @@ const VIEWS = {
     ${head("Rutina / Gym", PLAN?.updated ? esc(PLAN.updated) : "Plan-73: fuerza y potencia para judo −73 kg.",
       `${syncBadge()}<a class="btn" href="${PLAN73}" target="_blank" rel="noopener">Abrir Plan-73 ↗</a>`, "Plan-73")}
     ${PLAN ? `<div class="filters">${PLAN.blocks.map((x) => `<button class="chip ${x.id === b.id ? "on" : ""}" data-act="sel-block" data-block="${x.id}">${esc(x.name)}<span class="muted small mono">${esc(x.weeks)}</span>${x.id === cur.id ? `<span class="dot" style="background:var(--accent)" title="Bloque actual en Plan-73"></span>` : ""}</button>`).join("")}</div>` : ""}
-    <div class="bento"><div class="c-12">${weekStrip(selDay, true, R)}</div></div>
+    <div class="bento"><div class="c-12">${gymCal({ sel: selDay, R })}</div></div>
     <div class="bento">
       <div class="card c-8">
         <div class="card-head">
-          <div><span class="label-sm">${d.name}${d.day === new Date().getDay() ? " · hoy" : ""}</span><h2 style="font-size:22px;margin-top:6px">${sessionName(d)}</h2>${d.sub ? `<div class="muted" style="margin-top:4px">${esc(d.sub)}</div>` : ""}</div>
-          ${tag(d.tag)}
+          <div><span class="label-sm">${dateLong(selDate)}${selDate === today() ? " · hoy" : ""}</span><h2 style="font-size:22px;margin-top:6px">${sessionName(d)}</h2>${d.sub ? `<div class="muted" style="margin-top:4px">${esc(d.sub)}</div>` : ""}</div>
+          <div class="card-head-r">${tag(d.tag)}${!isOff(d) && !selFuture ? `<button class="btn btn-sm ${selDone ? "btn-done" : "btn-primary"}" type="button" data-act="gym-day" data-date="${selDate}" title="${selDone ? "Tocá para deshacer" : "Marcar este día como hecho"}">${selDone ? "✓ Hecho" : "Marcar como hecho"}</button>` : ""}</div>
         </div>
         ${detail}
       </div>
@@ -743,40 +847,120 @@ const VIEWS = {
     const ti = days.findIndex((x) => has(`${x.title} ${x.sub}`, dow));       // el día armado que corresponde a hoy
     const sel = Math.min(foodSel ?? Math.max(ti, 0), Math.max(days.length - 1, 0)), D = days[sel], isToday = sel === ti;
     const cook = N?.cook || [], cookToday = cook.find((c) => has(c.label, dow));
-    const cell = (c) => esc((c || []).join(" "));
-    const planned = ROUTINE[dow];
+    const cell = (c) => (c || []).join(" ");
+    const isTotal = (r) => /^total$/i.test(cell(r[0]).trim());
+    const meta = (re) => (N?.daily || []).find((r) => re.test(cell(r[0])));
+    const mK = meta(/calor/i), mP = meta(/prote/i), planned = ROUTINE[dow];
+    const totalRow = D?.rows.find(isTotal);
     return `
-    ${head("Comida", "Cocina de hoy, según Plan-73. Los números son aproximados.", syncBadge())}
+    ${head("Comida", "Qué comer hoy, con la receta de cada cosa. Todo sale de Plan-73.", syncBadge())}
     ${!D ? `<div class="card"><p class="empty">${PLAN ? "Plan-73 no tiene días de comida armados." : "Cargando Plan-73…"}</p></div>` : `
     ${cookToday ? `<div class="card cook-today" style="margin-bottom:16px"><div class="card-head"><span class="label-sm">Hoy se cocina · ${DAY_NAMES[dow]}</span></div><div class="plan-html" style="margin:0">${cookToday.html}</div></div>` : ""}
     <div class="bento">
       <div class="card c-8">
         <div class="card-head"><div>
-          <span class="label-sm">${isToday ? `Hoy · ${DAY_NAMES[dow]}${planned && !isOff(planned) ? ` · entrenás ${esc(planned.title)}` : ""}` : "Día armado"}</span>
+          <span class="label-sm">${isToday ? `Hoy · ${DAY_NAMES[dow]}${planned && !isOff(planned) ? ` · entrenás ${esc(planned.title)}` : ""}` : "Otro día"}</span>
           <h2 style="font-size:22px;margin-top:6px">${esc(D.title)}</h2>
           ${D.sub ? `<div class="muted" style="margin-top:4px">${esc(D.sub)}</div>` : ""}
         </div></div>
-        <div class="table-wrap"><table class="meal-t"><tbody>
-          ${D.rows.map((r) => `<tr class="${/^total$/i.test((r[0] || []).join(" ").trim()) ? "total" : ""}"><td>${cell(r[0])}</td><td>${cell(r[1])}</td><td class="num">${cell(r[2])}</td></tr>`).join("")}
-        </tbody></table></div>
-        <div class="filters" style="margin:16px 0 0">
-          ${days.map((x, i) => `<button class="chip ${i === sel ? "on" : ""}" data-act="food-day" data-i="${i}">${esc(x.title)}${i === ti ? `<span class="dot" style="background:var(--accent)" title="Es el de hoy"></span>` : ""}</button>`).join("")}
+        <p class="tip-line" style="margin:-4px 0 0">Tocá una comida para ver qué lleva y cómo se hace.</p>
+        <div class="meals">
+          ${D.rows.map((r, i) => (isTotal(r) ? "" : `<button class="meal" type="button" data-act="recipe" data-d="${sel}" data-r="${i}"><span class="ms">${esc(cell(r[0]))}</span><span class="mn">${esc(cell(r[1]))}</span><span class="mk">${esc(cell(r[2]))}</span><span class="mgo" aria-hidden="true">›</span></button>`)).join("")}
+        </div>
+        ${totalRow ? `<div class="meal-total"><span>Total del día</span><span class="mono">${esc(fmtNums(cell(totalRow[2])))}</span></div>` : ""}
+        <div class="filters" style="margin:12px 0 0"><span class="small muted">Ver otro día:</span>
+          ${days.map((x, i) => `<button class="chip ${i === sel ? "on" : ""}" type="button" data-act="food-day" data-i="${i}">${esc(x.title)}${i === ti ? `<span class="dot" style="background:var(--accent)" title="Es el de hoy"></span>` : ""}</button>`).join("")}
         </div>
       </div>
       <div class="c-4 side stack">
+        <div class="card"><div class="card-head"><h2>Meta del día</h2><span class="sub">Plan-73</span></div>
+          <div class="goal">
+            ${mK ? `<div><span class="label-sm">Calorías</span><b>${esc(cell(mK[1]))}</b></div>` : ""}
+            ${mP ? `<div><span class="label-sm">Proteína</span><b>${esc(cell(mP[1]))}</b></div>` : ""}
+          </div>
+          ${N?.slots?.length ? `<span class="label-sm" style="display:block;margin:14px 0 6px">Cómo se arma el día</span>
+          <ul class="mini-rows">${N.slots.map((r) => `<li><span class="lbl">${esc(cell(r[0]))}</span><span class="val">${esc(cell(r[1]))}</span><span class="mono">${esc(cell(r[2]))}</span></li>`).join("")}</ul>` : ""}
+          <a class="small" href="#habitos">Chequear los números de hoy en Hábitos →</a>
+        </div>
         ${cook.length ? `<div class="card"><div class="card-head"><h2>Cocina de la semana</h2><span class="sub">Plan-73</span></div>
           <ul class="cook">${cook.map((c) => `<li class="${c === cookToday ? "today" : ""}"><b>${esc(c.label)}:</b> ${c.html}</li>`).join("")}</ul></div>` : ""}
-        ${N?.slots?.length ? `<div class="card"><div class="card-head"><h2>Cómo armar el día</h2></div>
-          <ul class="mini-rows">${N.slots.map((r) => `<li><span class="lbl">${cell(r[0])}</span><span class="val">${cell(r[1])}</span><span class="mono">${cell(r[2])}</span></li>`).join("")}</ul></div>` : ""}
         ${notesCard("comida", "Notas de comida")}
       </div>
     </div>
     ${N?.options?.length ? `<div class="bento"><div class="card c-12">
-      <div class="card-head"><h2>Opciones para elegir</h2><span class="sub">${N.options.length} grupos</span></div>
-      ${N.options.map((o) => `<details class="opt"><summary>${esc(o.title)}<span class="muted small mono">${esc(o.sub)}</span></summary>
-        <div class="table-wrap"><table><tbody>${o.rows.map((r) => `<tr><td><b>${cell(r[0])}</b></td><td class="muted">${cell(r[1])}</td><td class="num">${cell(r[2])}</td></tr>`).join("")}</tbody></table></div>
-        ${o.note ? `<p class="small muted" style="margin:10px 0 0">${esc(o.note)}</p>` : ""}</details>`).join("")}
+      <div class="card-head"><h2>Recetas y opciones para elegir</h2><span class="sub">Tocá una para ver todas</span></div>
+      <div class="rcats">${N.options.map((o, gi) => `<button class="rcat" type="button" data-act="recipes" data-g="${gi}"><b>${esc(o.title)}</b><span class="muted small">${o.rows.length} opciones</span><span class="rcat-ex">${esc(o.rows.slice(0, 3).map((r) => cell(r[0])).join(" · "))}…</span></button>`).join("")}</div>
     </div></div>` : ""}`}`;
+  },
+
+  calendario() {
+    const t = today(), ym = calMonth || t.slice(0, 7), sel = calSel || t;
+    const [Y, M] = ym.split("-").map(Number);
+    const first = new Date(Y, M - 1, 1), nDays = new Date(Y, M, 0).getDate(), lead = (first.getDay() + 6) % 7;
+    const total = Math.ceil((lead + nDays) / 7) * 7;
+    const dowOf = (d) => new Date(d + "T12:00:00").getDay();
+    const on = (date) => ({ tasks: S.tasks.filter((x) => x.due === date), study: S.study.filter((x) => x.due === date), kg: S.weights.filter((w) => w.date === date) });
+    const pillsOf = (o) => [
+      ...o.tasks.map((x) => ({ c: "t", t: x.text, done: x.done })),
+      ...o.study.map((x) => ({ c: "s", t: `${x.subject}: ${x.text}`, done: x.done })),
+      ...o.kg.map((w) => ({ c: "w", t: `${String(w.kg).replace(".", ",")} kg`, done: false })),
+    ];
+    const monthName = first.toLocaleDateString("es-UY", { month: "long", year: "numeric" }).toLowerCase().replace(/^./, (c) => c.toUpperCase());
+    const cells = [...Array(total)].map((_, i) => {
+      const date = iso(new Date(Y, M - 1, 1 - lead + i)), d = ROUTINE[dowOf(date)], ps = pillsOf(on(date)), done = gymDone(date);
+      return `<button class="mc ${date.slice(0, 7) !== ym ? "out" : ""} ${date === t ? "today" : ""} ${date === sel ? "sel" : ""}" type="button" data-act="cal-day" data-date="${date}" aria-label="${esc(dateLong(date))}">
+        <span class="mc-top"><b>${+date.slice(8)}</b><span class="mc-g ${done ? "on" : ""} ${isOff(d) ? "rest" : ""}" title="${esc(d.title)}">${done ? "✓" : esc(letterOf(d))}</span></span>
+        <span class="mc-items">${ps.slice(0, 2).map((p) => `<span class="mc-p ${p.c} ${p.done ? "done" : ""}">${esc(p.t)}</span>`).join("")}${ps.length > 2 ? `<span class="mc-more">+${ps.length - 2} más</span>` : ""}</span>
+        <span class="mc-dots">${ps.slice(0, 4).map((p) => `<i class="${p.c}"></i>`).join("")}</span>
+      </button>`;
+    }).join("");
+    // Panel del día elegido
+    const o = on(sel), dR = ROUTINE[dowOf(sel)], future = sel > t;
+    const hs = habitList().filter((h) => !(h.gym && isOff(dR)));
+    const hn = hs.filter((h) => (h.gym ? gymDone(sel) : (S.habits[sel] || []).includes(h.key))).length;
+    const undated = S.tasks.filter((x) => !x.due && !x.done);
+    return `
+    ${head("Calendario", "Todo junto: entrenos, tareas, entregas de estudio y pesajes. Tocá un día para ver o agregar.", syncBadge())}
+    <div class="bento">
+      <div class="card c-8">
+        <div class="cal-head">
+          <button class="hnav" type="button" data-act="cal-nav" data-dir="-1" aria-label="Mes anterior">‹</button>
+          <b>${esc(monthName)}</b>
+          ${calMonth && calMonth !== t.slice(0, 7) ? `<button class="btn btn-sm btn-ghost" type="button" data-act="cal-nav" data-dir="0">Ir a hoy</button>` : ""}
+          <button class="hnav" type="button" data-act="cal-nav" data-dir="1" aria-label="Mes siguiente">›</button>
+        </div>
+        <div class="cal-dow">${["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((x) => `<span>${x}</span>`).join("")}</div>
+        <div class="cal-grid">${cells}</div>
+        <div class="cal-legend">
+          <span><i class="gl">A</i>Entreno del día (✓ si lo hiciste)</span><span><i class="t"></i>Tareas</span><span><i class="s"></i>Estudio</span><span><i class="w"></i>Pesaje</span>
+        </div>
+      </div>
+      <div class="c-4 side stack">
+        <div class="card">
+          <div class="card-head"><div><span class="label-sm">${sel === t ? "Hoy" : future ? "Más adelante" : "Día pasado"}</span><h2 style="font-size:20px;margin-top:6px">${esc(dateLong(sel))}</h2></div></div>
+          <div class="cd-sec"><span class="label-sm">Entreno</span>
+            <div class="cd-row"><span class="lt-s">${esc(letterOf(dR))}</span><span class="grow">${esc(dR.title)}${dR.sub ? `<span class="muted small" style="display:block">${esc(dR.sub)}</span>` : ""}</span>
+              ${!isOff(dR) && !future ? `<button class="btn btn-sm ${gymDone(sel) ? "btn-done" : "btn-primary"}" type="button" data-act="gym-day" data-date="${sel}">${gymDone(sel) ? "✓ Hecho" : "Marcar hecho"}</button>` : `<span class="small muted">${future ? "planificado" : "descanso"}</span>`}
+            </div>
+          </div>
+          <div class="cd-sec"><span class="label-sm">Para hacer este día</span>
+            <ul class="list">
+              ${o.tasks.map((x) => `<li class="${x.done ? "done" : ""}"><input type="checkbox" data-act="toggle-task" data-id="${x.id}" ${x.done ? "checked" : ""} aria-label="Hecho" /><span class="grow">${esc(x.text)}</span><button class="del" data-act="del-task" data-id="${x.id}" title="Borrar">✕</button></li>`).join("")}
+              ${o.study.map((x) => `<li class="${x.done ? "done" : ""}"><input type="checkbox" data-act="toggle-study" data-id="${x.id}" ${x.done ? "checked" : ""} aria-label="Hecho" /><span class="grow"><b style="font-weight:500">${esc(x.subject)}</b> · ${esc(x.text)}</span><span class="tag estudio">Estudio</span></li>`).join("")}
+              ${o.tasks.length + o.study.length ? "" : `<li class="empty" style="background:none">Nada para este día.</li>`}
+            </ul>
+          </div>
+          ${o.kg.length ? `<div class="cd-sec"><span class="label-sm">Pesaje</span><span>${o.kg.map((w) => `${String(w.kg).replace(".", ",")} kg${w.note ? ` · ${esc(w.note)}` : ""}`).join(" · ")}</span></div>` : ""}
+          ${!future ? `<div class="cd-sec"><span class="label-sm">Hábitos</span><a href="#habitos">${hn} de ${hs.length} cumplidos →</a></div>` : ""}
+          <form class="inline" data-form="cal-task" data-date="${sel}" style="margin-top:16px">
+            <input name="text" placeholder="Agregar algo para este día…" required /><button class="btn btn-primary">Agregar</button>
+          </form>
+        </div>
+        ${undated.length ? `<div class="card"><div class="card-head"><h2>Sin fecha</h2><span class="sub">${undated.length}</span></div>
+          <p class="small muted" style="margin:-6px 0 10px">Elegí una fecha y la tarea aparece en el calendario.</p>
+          <ul class="list">${undated.slice(0, 8).map((x) => `<li><span class="grow">${esc(x.text)}</span><input type="date" data-act="task-due" data-id="${x.id}" aria-label="Ponerle fecha a: ${esc(x.text)}" style="flex:0 0 140px" /></li>`).join("")}</ul></div>` : ""}
+      </div>
+    </div>`;
   },
 
   habitos() {
@@ -1119,9 +1303,11 @@ function render() {
   $("#view").innerHTML = VIEWS[route()]();
   $("#top-sync").innerHTML = syncBadge();
   document.title = route() === "inicio" ? "Manu HQ" : `${routeLabel(route())} · Manu HQ`;
+  refreshPop();
 }
 window.addEventListener("hashchange", () => {
-  if (route() === "rutina" && !render.keepDay) selDay = new Date().getDay();
+  if (route() === "rutina" && !render.keepDay) { selDay = new Date().getDay(); weekOff = 0; }
+  if (route() === "calendario") { calMonth = null; calSel = null; }
   render.keepDay = false;
   render(); window.scrollTo(0, 0); $("#sidebar").classList.remove("open");
   const v = $("#view"); v.style.animation = "none"; void v.offsetWidth; v.style.animation = "";   // transición suave entre secciones
@@ -1148,7 +1334,8 @@ document.addEventListener("submit", (e) => {
   const v = Object.fromEntries(new FormData(f));
   const kind = f.dataset.form;
   switch (kind) {
-    case "task": S.tasks.unshift({ id: uid(), text: v.text, area: f.dataset.area || v.area, done: false }); break;
+    case "task": S.tasks.unshift({ id: uid(), text: v.text, area: f.dataset.area || v.area, done: false, ...(v.due ? { due: v.due } : {}) }); break;
+    case "cal-task": S.tasks.unshift({ id: uid(), text: v.text.trim(), area: "general", done: false, due: f.dataset.date }); break;
     case "check": S[f.dataset.key].push({ id: uid(), text: v.text, done: false }); break;
     case "weight": S.weights.push({ id: uid(), date: v.date || today(), kg: +v.kg, note: v.note }); break;
     case "study": S.study.push({ id: uid(), ...v, done: false }); break;
@@ -1186,6 +1373,31 @@ function act(el) {
       else { S.logs.gym.push({ id: uid(), date: today(), session: sessionText(ROUTINE[new Date().getDay()]) }); toast("Día marcado ✓"); }
       break;
     case "sel-day": selDay = +el.dataset.day; render(); return;
+    case "week-nav": { const dir = +el.dataset.dir; weekOff = dir === 0 ? 0 : Math.min(0, weekOff + dir); render(); return; }
+    case "gym-day": {     // marcar o desmarcar un entreno de hoy o de un día que ya pasó
+      const date = el.dataset.date;
+      if (!date || date > today()) return;
+      if (gymDone(date)) S.logs.gym = S.logs.gym.filter((l) => l.date !== date);
+      else { S.logs.gym.push({ id: uid(), date, session: sessionText(ROUTINE[new Date(date + "T12:00:00").getDay()]) }); toast("Día marcado ✓"); }
+      break;
+    }
+    case "open-cal": openPop("Calendario de entreno", () => gymCal({ pop: true, go: true }), "wide"); return;
+    case "recipe": {
+      const r = PLAN?.nutrition?.days?.[+el.dataset.d]?.rows?.[+el.dataset.r];
+      if (!r) return;
+      const dish = (r[1] || []).join(" ").trim(), rec = findRecipe(dish);
+      openPop(dish, () => recipeHTML({ nums: (r[2] || []).join(" "), slot: (r[0] || []).join(" "), rec, text: dish }));
+      return;
+    }
+    case "recipes": { const g = PLAN?.nutrition?.options?.[+el.dataset.g]; if (g) openPop(g.title, () => groupHTML(+el.dataset.g), "wide"); return; }
+    case "cal-nav": {
+      const dir = +el.dataset.dir, [Y, M] = (calMonth || today().slice(0, 7)).split("-").map(Number);
+      calMonth = dir ? iso(new Date(Y, M - 1 + dir, 1)).slice(0, 7) : null;
+      calSel = !calMonth || calMonth === today().slice(0, 7) ? null : calMonth + "-01";
+      render(); return;
+    }
+    case "cal-day": calSel = el.dataset.date; render(); return;
+    case "task-due": { const t = byId(S.tasks); if (t) { if (el.value) t.due = el.value; else delete t.due; } break; }
     case "food-day": foodSel = +el.dataset.i; render(); return;
     case "habit-day": {
       const dir = +el.dataset.dir;
@@ -1205,7 +1417,7 @@ function act(el) {
       }
       break;
     }
-    case "goto-rutina": selDay = +el.dataset.day; render.keepDay = true; location.hash = "rutina"; return;
+    case "goto-rutina": selDay = +el.dataset.day; render.keepDay = true; $("#pop").close(); location.hash = "rutina"; return;
     case "toggle-study": byId(S.study).done = el.checked; break;
     case "del-study": S.study = drop(S.study); break;
     case "del-idea": S.ideas = drop(S.ideas); break;
@@ -1237,11 +1449,11 @@ function act(el) {
 }
 document.addEventListener("click", (e) => {
   const el = e.target.closest("[data-act]");
-  if (el && el.tagName !== "SELECT" && el.type !== "checkbox") act(el);
+  if (el && el.tagName !== "SELECT" && el.type !== "checkbox" && el.type !== "date") act(el);
 });
 document.addEventListener("change", (e) => {
   const el = e.target.closest("[data-act]");
-  if (el && (el.tagName === "SELECT" || el.type === "checkbox")) act(el);
+  if (el && (el.tagName === "SELECT" || el.type === "checkbox" || el.type === "date")) act(el);
   const wf = e.target.dataset?.wf;
   if (wf && wf !== "q") { wazaF[wf] = e.target.value; refreshWaza(); }
 });
@@ -1253,6 +1465,11 @@ document.addEventListener("input", (e) => {
     $("#vocab-list").innerHTML = vocabHTML(L, L.vocab.filter((v) => !q || (v.w + " " + v.m).toLowerCase().includes(q)));
   }
 });
+
+/* Ventana flotante: ✕, clic en lo opaco y Esc la cierran */
+$("#pop-x").addEventListener("click", () => $("#pop").close());
+$("#pop").addEventListener("click", (e) => { if (e.target === $("#pop")) $("#pop").close(); });
+$("#pop").addEventListener("close", () => { popFn = null; });
 
 /* Export / import */
 $("#export-btn").addEventListener("click", () => {

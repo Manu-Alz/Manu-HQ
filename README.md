@@ -1,17 +1,19 @@
 # Manu HQ
 
-Mi hub personal: rutina de Plan-73, judo, cambio físico, surf, estilo de vida en Uruguay, estudio, idiomas, proyectos, contenido e ideas. Con mi playlist de Spotify flotando abajo.
+Mi hub personal: rutina y comida de Plan-73, judo, cambio físico, calendario, hábitos, surf, estudio, idiomas, proyectos, contenido e ideas. Con mi música de Spotify en un botón arriba.
 
 🔗 https://manu-alz.github.io/Manu-HQ/
 
 ## Secciones
 - **Inicio**: lo que toca hoy, la semana, tareas, ideas, proyectos y estudio.
 - **Rutina / Gym**: se lee en vivo de [Plan-73](https://manu-alz.github.io/Plan-73/) (semana, bloques, ejercicios, días atléticos, sesión larga). Si cambio Plan-73, el HQ se actualiza solo.
+- **Calendario de entreno** (dentro de Rutina, y como popup desde la tarjeta "Semana" del Inicio): la semana en fila, de lunes a domingo, con un círculo por día para marcarlo como hecho. Se puede volver a semanas anteriores para marcar lo que te olvidaste (hacia adelante no).
 - **Judo**: frase del día (218 frases y datos), los 4 pilares y las 100 técnicas del Kodokan con filtros por cinturón, grupo y estado.
 - **Cambio físico**: mis pesajes + metas, números diarios, control de peso y objetivos de fuerza leídos de Plan-73.
 - **Compras**: lista de cosas para comprar, con nota o link y precio opcionales.
+- **Calendario** (en Vida): el mes completo con entrenos, tareas con fecha, entregas de estudio y pesajes. Tocás un día para ver o agregar cosas.
 - **Watch list**: películas, series y videos para ver, con tipo y nota o link.
-- **Comida** (debajo de Gym): la cocina de hoy según Plan-73: el día armado que corresponde, la cocina de la semana, cómo armar el día y las opciones para elegir (batidos, desayunos, almuerzos y cenas, meriendas).
+- **Comida** (debajo de Gym): la cocina de hoy según Plan-73. Tocás cualquier comida y se abre la receta (qué lleva, con cantidades). Abajo están todas las opciones: batidos, desayunos, almuerzos y cenas, meriendas.
 - **Hábitos**: check-in de cada día con los números diarios de Plan-73 (calorías, proteína, creatina, agua, sueño…) más si entrené. Grilla de la semana y rachas.
 - **Surf**, **Estudio**, **Idiomas**, **Proyectos**, **Contenido**, **Ideas**.
 - Cada sección tiene sus propias notas. La barra de arriba guarda ideas desde cualquier página.
