@@ -501,13 +501,13 @@ const rangeLabel = (dates) => {
 };
 function gymCal({ sel = null, R = ROUTINE, pop = false, mark = true, nav = true, go = false, head = true } = {}) {
   const dates = weekDates(nav ? weekOff : 0), t = today(), days = [1, 2, 3, 4, 5, 6, 0];
-  const nDone = dates.filter((dt, i) => gymDone(dt) && !isOff(R[days[i]])).length;
-  const nTrain = days.filter((dow) => !isOff(R[dow])).length || 6;
+  const nDone = dates.filter(gymDone).length;
+  const nTrain = days.length;   // los 7 días cuentan, también la flexibilidad
   const title = !nav || weekOff === 0 ? "Esta semana" : weekOff === -1 ? "Semana pasada" : "Semana del " + rangeLabel(dates);
   return `<div class="gcal">
     ${head ? `<div class="gcal-head">
       ${nav ? `<button class="hnav" type="button" data-act="week-nav" data-dir="-1" aria-label="Semana anterior" title="Semana anterior">‹</button>` : ""}
-      <div class="gcal-t"><b>${title}</b><span class="muted">${rangeLabel(dates)} · ${nDone} de ${nTrain} entrenos hechos</span></div>
+      <div class="gcal-t"><b>${title}</b><span class="muted">${rangeLabel(dates)} · ${nDone} de ${nTrain} días hechos</span></div>
       ${nav && weekOff < 0 ? `<button class="btn btn-sm btn-ghost" type="button" data-act="week-nav" data-dir="0">Ir a hoy</button>` : ""}
       ${nav ? `<button class="hnav" type="button" data-act="week-nav" data-dir="1" aria-label="Semana siguiente" title="Semana siguiente" ${weekOff >= 0 ? "disabled" : ""}>›</button>` : ""}
     </div>` : ""}
@@ -625,8 +625,8 @@ const VIEWS = {
     const hour = new Date().getHours();
     const hi = hour < 6 ? "Buenas noches" : hour < 12 ? "Buen día" : hour < 20 ? "Buenas tardes" : "Buenas noches";
     const dates = weekDates();
-    const gymWeek = dates.filter((dt, i) => gymDone(dt) && !isOff(ROUTINE[[1, 2, 3, 4, 5, 6, 0][i]])).length;
-    const trainDays = ROUTINE.filter((r) => !isOff(r)).length || 6;   // el descanso no cuenta
+    const gymWeek = dates.filter(gymDone).length;
+    const trainDays = 7;   // los 7 días cuentan, también el de flexibilidad
     const dom = Object.values(S.waza).filter((v) => v === 2).length;
     const bestLang = S.langs.map((l) => ({ l, n: streakOf(l.days) })).sort((a, b) => b.n - a.n)[0];
     const active = S.projects.filter((p) => p.status === "Activo");
