@@ -882,3 +882,18 @@ details.opt .table-wrap { padding-bottom: 8px; }
   .weekstrip.in-pop .dt br, .weekstrip.in-pop .dt .muted { display: none; }
   .weekstrip.in-pop .wd-ck, .weekstrip.in-pop .wd .ok { top: 50%; right: 12px; transform: translateY(-50%); }
 }
+
+/* Color del ✓ según el tipo de día: gimnasio (verde), atlético (ámbar), flexibilidad (violeta) */
+:root { --kc: var(--green); --kc-soft: rgba(94,224,160,.35); }
+.k-gym { --kc: var(--green); --kc-soft: rgba(94,224,160,.35); }
+.k-ath { --kc: var(--amber); --kc-soft: rgba(255,196,107,.4); }
+.k-flex { --kc: var(--violet); --kc-soft: rgba(167,139,255,.45); }
+.wd.done { border-color: var(--kc-soft); }
+.wd-ck:hover { border-color: var(--kc); }
+.wd-ck.on, .mc-g.on, .wd .ok { background: var(--kc); border-color: var(--kc); color: #0b0f1a; }
+.mc-g.on.rest { opacity: 1; }
+.btn-done[class*="k-"] { background: transparent; color: var(--kc); border-color: var(--kc-soft); }
+.btn-done[class*="k-"]:hover { color: var(--red); border-color: var(--red); background: rgba(255,107,129,.08); }
+.gcal-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.gcal-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.gcal-legend i.k, .cal-legend i.k { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--kc); }

@@ -493,6 +493,7 @@ function refreshPop() {   // si hay un popup abierto lo redibuja (por ejemplo, d
 let weekOff = 0;                     // semana que miro (0 = esta, -1 = la pasada…). No se puede ir hacia adelante.
 let calMonth = null, calSel = null;  // Calendario general: mes (YYYY-MM) y día elegido (null = hoy)
 const gymDone = (date) => S.logs.gym.some((l) => l.date === date);
+const kindOfDay = (d) => (isOff(d) ? "flex" : isSprint(d) ? "ath" : "gym");   // gimnasio · atlético · flexibilidad: cada uno con su color
 const dateLong = (d) => { const s = new Date(d + "T12:00:00").toLocaleDateString("es-UY", { weekday: "long", day: "numeric", month: "long" }); return s.charAt(0).toUpperCase() + s.slice(1); };
 const rangeLabel = (dates) => {
   const a = new Date(dates[0] + "T12:00:00"), b = new Date(dates[6] + "T12:00:00"), m = (d) => d.toLocaleDateString("es-UY", { month: "long" }).toLowerCase();
@@ -511,19 +512,20 @@ function gymCal({ sel = null, R = ROUTINE, pop = false, mark = true, nav = true,
       ${nav ? `<button class="hnav" type="button" data-act="week-nav" data-dir="1" aria-label="Semana siguiente" title="Semana siguiente" ${weekOff >= 0 ? "disabled" : ""}>›</button>` : ""}
     </div>` : ""}
     <div class="weekstrip ${pop ? "in-pop" : ""}">${days.map((dow, i) => {
-      const d = R[dow], date = dates[i], done = gymDone(date), future = date > t, off = isOff(d), isToday = date === t;
+      const d = R[dow], date = dates[i], done = gymDone(date), future = date > t, isToday = date === t;
       const label = `${done ? "Quitar la marca de hecho" : "Marcar como hecho"}: ${d.title}, ${DAY_NAMES[dow]} ${+date.slice(8)}`;
-      return `<div class="wd ${isToday ? "today" : ""} ${sel === dow ? "sel" : ""} ${done ? "done" : ""} ${future ? "fut" : ""}">
+      return `<div class="wd k-${kindOfDay(d)} ${isToday ? "today" : ""} ${sel === dow ? "sel" : ""} ${done ? "done" : ""} ${future ? "fut" : ""}">
         <button class="wd-main" type="button" ${go ? `data-act="goto-rutina" data-day="${dow}"` : `data-act="sel-day" data-day="${dow}"`}>
           <span class="dn">${DAY_SHORT[dow]} <b>${+date.slice(8)}</b>${isToday ? `<i class="hoy">hoy</i>` : ""}</span>
           <span class="lt">${letterOf(d)}</span>
           <span class="dt">${esc(d.title)}${d.sub ? `<br><span class="muted">${esc(d.sub)}</span>` : ""}</span>
         </button>
-        ${mark && !off && !future ? `<button class="wd-ck ${done ? "on" : ""}" type="button" data-act="gym-day" data-date="${date}" aria-pressed="${done}" title="${esc(label)}" aria-label="${esc(label)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></button>` : ""}
+        ${mark && !future ? `<button class="wd-ck ${done ? "on" : ""}" type="button" data-act="gym-day" data-date="${date}" aria-pressed="${done}" title="${esc(label)}" aria-label="${esc(label)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></button>` : ""}
         ${!mark && done ? `<span class="ok">✓</span>` : ""}
       </div>`;
     }).join("")}</div>
-    ${mark ? `<p class="gcal-help">Tocá el círculo de un día para marcarlo como hecho. Con ‹ volvés a las semanas anteriores si te olvidaste de marcar.</p>` : ""}
+    ${mark ? `<p class="gcal-help">Tocá el círculo de un día para marcarlo como hecho. Con ‹ volvés a las semanas anteriores si te olvidaste de marcar.</p>
+    <div class="gcal-legend"><span><i class="k k-gym"></i>Gimnasio</span><span><i class="k k-ath"></i>Atlético</span><span><i class="k k-flex"></i>Flexibilidad</span></div>` : ""}
   </div>`;
 }
 
@@ -642,7 +644,7 @@ const VIEWS = {
         <div class="meta">${d.sub ? `<span class="muted">${esc(d.sub)}</span>` : ""}<span class="sub mono small muted">${esc(blockLabel())}</span></div>
         ${exList(d)}
         <div class="hero-actions">
-          ${d.items.length ? `<button class="btn ${doneToday ? "btn-done" : "btn-primary"}" data-act="done-today" title="${doneToday ? "Tocá para deshacer" : ""}">${doneToday ? "✓ Hecho hoy" : "Marcar como hecho"}</button>` : ""}
+          ${d.items.length ? `<button class="btn k-${kindOfDay(d)} ${doneToday ? "btn-done" : "btn-primary"}" data-act="done-today" title="${doneToday ? "Tocá para deshacer" : ""}">${doneToday ? "✓ Hecho hoy" : "Marcar como hecho"}</button>` : ""}
           <a class="btn" href="#rutina">Ver detalle</a>
           <a class="btn btn-ghost" href="${PLAN73}" target="_blank" rel="noopener">Plan-73 ↗</a>
         </div>
@@ -735,7 +737,7 @@ const VIEWS = {
       <div class="card c-8">
         <div class="card-head">
           <div><span class="label-sm">${dateLong(selDate)}${selDate === today() ? " · hoy" : ""}</span><h2 style="font-size:22px;margin-top:6px">${sessionName(d)}</h2>${d.sub ? `<div class="muted" style="margin-top:4px">${esc(d.sub)}</div>` : ""}</div>
-          <div class="card-head-r">${tag(d.tag)}${!isOff(d) && !selFuture ? `<button class="btn btn-sm ${selDone ? "btn-done" : "btn-primary"}" type="button" data-act="gym-day" data-date="${selDate}" title="${selDone ? "Tocá para deshacer" : "Marcar este día como hecho"}">${selDone ? "✓ Hecho" : "Marcar como hecho"}</button>` : ""}</div>
+          <div class="card-head-r">${tag(d.tag)}${!selFuture ? `<button class="btn btn-sm k-${kindOfDay(d)} ${selDone ? "btn-done" : "btn-primary"}" type="button" data-act="gym-day" data-date="${selDate}" title="${selDone ? "Tocá para deshacer" : "Marcar este día como hecho"}">${selDone ? "✓ Hecho" : "Marcar como hecho"}</button>` : ""}</div>
         </div>
         ${detail}
       </div>
@@ -909,14 +911,14 @@ const VIEWS = {
     const cells = [...Array(total)].map((_, i) => {
       const date = iso(new Date(Y, M - 1, 1 - lead + i)), d = ROUTINE[dowOf(date)], ps = pillsOf(on(date)), done = gymDone(date);
       return `<button class="mc ${date.slice(0, 7) !== ym ? "out" : ""} ${date === t ? "today" : ""} ${date === sel ? "sel" : ""}" type="button" data-act="cal-day" data-date="${date}" aria-label="${esc(dateLong(date))}">
-        <span class="mc-top"><b>${+date.slice(8)}</b><span class="mc-g ${done ? "on" : ""} ${isOff(d) ? "rest" : ""}" title="${esc(d.title)}">${done ? "✓" : esc(letterOf(d))}</span></span>
+        <span class="mc-top"><b>${+date.slice(8)}</b><span class="mc-g k-${kindOfDay(d)} ${done ? "on" : ""} ${isOff(d) ? "rest" : ""}" title="${esc(d.title)}">${done ? "✓" : esc(letterOf(d))}</span></span>
         <span class="mc-items">${ps.slice(0, 2).map((p) => `<span class="mc-p ${p.c} ${p.done ? "done" : ""}">${esc(p.t)}</span>`).join("")}${ps.length > 2 ? `<span class="mc-more">+${ps.length - 2} más</span>` : ""}</span>
         <span class="mc-dots">${ps.slice(0, 4).map((p) => `<i class="${p.c}"></i>`).join("")}</span>
       </button>`;
     }).join("");
     // Panel del día elegido
     const o = on(sel), dR = ROUTINE[dowOf(sel)], future = sel > t;
-    const hs = habitList().filter((h) => !(h.gym && isOff(dR)));
+    const hs = habitList();
     const hn = hs.filter((h) => (h.gym ? gymDone(sel) : (S.habits[sel] || []).includes(h.key))).length;
     const undated = S.tasks.filter((x) => !x.due && !x.done);
     return `
@@ -932,7 +934,7 @@ const VIEWS = {
         <div class="cal-dow">${["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((x) => `<span>${x}</span>`).join("")}</div>
         <div class="cal-grid">${cells}</div>
         <div class="cal-legend">
-          <span><i class="gl">A</i>Entreno del día (✓ si lo hiciste)</span><span><i class="t"></i>Tareas</span><span><i class="s"></i>Estudio</span><span><i class="w"></i>Pesaje</span>
+          <span><i class="gl">A</i>Entreno del día (✓ si lo hiciste)</span><span><i class="k k-gym"></i>Gimnasio</span><span><i class="k k-ath"></i>Atlético</span><span><i class="k k-flex"></i>Flexibilidad</span><span><i class="t"></i>Tareas</span><span><i class="s"></i>Estudio</span><span><i class="w"></i>Pesaje</span>
         </div>
       </div>
       <div class="c-4 side stack">
@@ -940,7 +942,7 @@ const VIEWS = {
           <div class="card-head"><div><span class="label-sm">${sel === t ? "Hoy" : future ? "Más adelante" : "Día pasado"}</span><h2 style="font-size:20px;margin-top:6px">${esc(dateLong(sel))}</h2></div></div>
           <div class="cd-sec"><span class="label-sm">Entreno</span>
             <div class="cd-row"><span class="lt-s">${esc(letterOf(dR))}</span><span class="grow">${esc(dR.title)}${dR.sub ? `<span class="muted small" style="display:block">${esc(dR.sub)}</span>` : ""}</span>
-              ${!isOff(dR) && !future ? `<button class="btn btn-sm ${gymDone(sel) ? "btn-done" : "btn-primary"}" type="button" data-act="gym-day" data-date="${sel}">${gymDone(sel) ? "✓ Hecho" : "Marcar hecho"}</button>` : `<span class="small muted">${future ? "planificado" : "descanso"}</span>`}
+              ${!future ? `<button class="btn btn-sm k-${kindOfDay(dR)} ${gymDone(sel) ? "btn-done" : "btn-primary"}" type="button" data-act="gym-day" data-date="${sel}">${gymDone(sel) ? "✓ Hecho" : "Marcar hecho"}</button>` : `<span class="small muted">planificado</span>`}
             </div>
           </div>
           <div class="cd-sec"><span class="label-sm">Para hacer este día</span>
@@ -966,9 +968,9 @@ const VIEWS = {
   habitos() {
     const hd = habitDay || today(), isNow = hd === today(), todayD = today(), hs = habitList();
     const dowOf = (d) => new Date(d + "T12:00:00").getDay();
-    const offGym = (h, d) => h.gym && isOff(ROUTINE[dowOf(d)]);             // en un día sin gimnasio no se pide "Entrené"
     const done = (h, d) => (h.gym ? S.logs.gym.some((l) => l.date === d) : (S.habits[d] || []).includes(h.key));
-    const list = hs.filter((h) => !offGym(h, hd)), n = list.filter((h) => done(h, hd)).length;
+    const offGym = (h, d) => h.gym && isOff(ROUTINE[dowOf(d)]) && !done(h, d);   // día de flexibilidad que no marqué: no corta la racha
+    const list = hs, n = list.filter((h) => done(h, hd)).length;
     const goalOf = (h) => (h.gym ? ROUTINE[dowOf(hd)]?.title || "" : h.goal);
     const streak = (h) => {   // días seguidos hasta hoy (si hoy todavía no lo hiciste, cuenta desde ayer)
       const d = new Date(); let c = 0;
