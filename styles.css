@@ -848,7 +848,7 @@ details.opt .table-wrap { padding-bottom: 8px; }
 .meal-total { display: flex; justify-content: space-between; padding: 12px 14px 0; font-weight: 600; }
 .goal { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .goal b { display: block; margin-top: 4px; font: 700 18px/1.2 var(--display); }
-.rcats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.rcats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
 .rcat { display: grid; gap: 4px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--card-2); color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: border-color .15s, transform .15s; }
 .rcat:hover { border-color: var(--accent); transform: translateY(-1px); }
 .rcat b { font: 700 16px var(--display); }

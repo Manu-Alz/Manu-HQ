@@ -859,7 +859,8 @@ const VIEWS = {
     ${!D ? `<div class="card"><p class="empty">${PLAN ? "Plan-73 no tiene días de comida armados." : "Cargando Plan-73…"}</p></div>` : `
     ${cookToday ? `<div class="card cook-today" style="margin-bottom:16px"><div class="card-head"><span class="label-sm">Hoy se cocina · ${DAY_NAMES[dow]}</span></div><div class="plan-html" style="margin:0">${cookToday.html}</div></div>` : ""}
     <div class="bento">
-      <div class="card c-8">
+      <div class="c-8 stack">
+      <div class="card">
         <div class="card-head"><div>
           <span class="label-sm">${isToday ? `Hoy · ${DAY_NAMES[dow]}${planned && !isOff(planned) ? ` · entrenás ${esc(planned.title)}` : ""}` : "Otro día"}</span>
           <h2 style="font-size:22px;margin-top:6px">${esc(D.title)}</h2>
@@ -873,6 +874,11 @@ const VIEWS = {
         <div class="filters" style="margin:12px 0 0"><span class="small muted">Ver otro día:</span>
           ${days.map((x, i) => `<button class="chip ${i === sel ? "on" : ""}" type="button" data-act="food-day" data-i="${i}">${esc(x.title)}${i === ti ? `<span class="dot" style="background:var(--accent)" title="Es el de hoy"></span>` : ""}</button>`).join("")}
         </div>
+      </div>
+      ${N?.options?.length ? `<div class="card">
+        <div class="card-head"><h2>Recetas y opciones para elegir</h2><span class="sub">Tocá una para ver todas</span></div>
+        <div class="rcats">${N.options.map((o, gi) => `<button class="rcat" type="button" data-act="recipes" data-g="${gi}"><b>${esc(o.title)}</b><span class="muted small">${o.rows.length} opciones</span><span class="rcat-ex">${esc(o.rows.slice(0, 3).map((r) => cell(r[0])).join(" · "))}…</span></button>`).join("")}</div>
+      </div>` : ""}
       </div>
       <div class="c-4 side stack">
         <div class="card"><div class="card-head"><h2>Meta del día</h2><span class="sub">Plan-73</span></div>
@@ -888,11 +894,7 @@ const VIEWS = {
           <ul class="cook">${cook.map((c) => `<li class="${c === cookToday ? "today" : ""}"><b>${esc(c.label)}:</b> ${c.html}</li>`).join("")}</ul></div>` : ""}
         ${notesCard("comida", "Notas de comida")}
       </div>
-    </div>
-    ${N?.options?.length ? `<div class="bento"><div class="card c-12">
-      <div class="card-head"><h2>Recetas y opciones para elegir</h2><span class="sub">Tocá una para ver todas</span></div>
-      <div class="rcats">${N.options.map((o, gi) => `<button class="rcat" type="button" data-act="recipes" data-g="${gi}"><b>${esc(o.title)}</b><span class="muted small">${o.rows.length} opciones</span><span class="rcat-ex">${esc(o.rows.slice(0, 3).map((r) => cell(r[0])).join(" · "))}…</span></button>`).join("")}</div>
-    </div></div>` : ""}`}`;
+    </div>`}`;
   },
 
   calendario() {
@@ -1472,6 +1474,17 @@ document.addEventListener("input", (e) => {
 $("#pop-x").addEventListener("click", () => $("#pop").close());
 $("#pop").addEventListener("click", (e) => { if (e.target === $("#pop")) $("#pop").close(); });
 $("#pop").addEventListener("close", () => { popFn = null; });
+
+/* Si dejás la página abierta de un día para el otro, se actualiza sola cuando cambia la fecha */
+let lastDay = today();
+function dayCheck() {
+  if (lastDay === today()) return;
+  lastDay = today(); selDay = new Date().getDay(); weekOff = 0; habitDay = null; calMonth = null; calSel = null;
+  updateSplash();
+  if (!document.activeElement?.matches("input, textarea, select")) render();
+}
+setInterval(dayCheck, 60000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) dayCheck(); });
 
 /* Export / import */
 $("#export-btn").addEventListener("click", () => {
