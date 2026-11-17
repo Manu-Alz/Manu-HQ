@@ -6,7 +6,7 @@ Mi hub personal: rutina y comida de Plan-73, judo, cambio físico, calendario, h
 
 ## Secciones
 - **Inicio**: lo que toca hoy, la semana, tareas, ideas, proyectos y estudio.
-- **Rutina / Gym**: se lee en vivo de [Plan-73](https://manu-alz.github.io/Plan-73/) (semana, bloques, ejercicios, días atléticos, sesión larga). Si cambio Plan-73, el HQ se actualiza solo.
+- **Rutina / Gym**: se lee en vivo de [Plan-73](https://manu-alz.github.io/Plan-73/) (semana, bloques, ejercicios, días atléticos, sesión larga). Si cambio Plan-73, el HQ se actualiza solo. Si Plan-73 cambia de formato y alguna parte no se puede leer, aparece un aviso ⚠ arriba que dice cuál.
 - **Calendario de entreno** (dentro de Rutina, y como popup desde la tarjeta "Semana" del Inicio): la semana en fila, de lunes a domingo, con un círculo por día para marcarlo como hecho. Se puede volver a semanas anteriores para marcar lo que te olvidaste (hacia adelante no).
 - **Judo**: frase del día (218 frases y datos), los 4 pilares y las 100 técnicas del Kodokan con filtros por cinturón, grupo y estado.
 - **Cambio físico**: mis pesajes + metas, números diarios, control de peso y objetivos de fuerza leídos de Plan-73.
@@ -18,6 +18,7 @@ Mi hub personal: rutina y comida de Plan-73, judo, cambio físico, calendario, h
 - **Surf**, **Estudio**, **Idiomas**, **Proyectos**, **Contenido**, **Ideas**.
 - Cada sección tiene sus propias notas. La barra de arriba guarda ideas desde cualquier página.
 - **Música**: botón arriba, junto al buscador de ideas. Abre un menú flotante con el reproductor de Spotify y mi biblioteca: pego links de playlists, álbumes, artistas o canciones, los ordeno en carpetas y los busco. Al cerrar el menú sigue sonando, con play/pausa y progreso en la barra. Spotify no deja leer mis carpetas desde una página, por eso la biblioteca es propia (se sincroniza como el resto).
+- **SoundCloud**: segundo botón arriba, al lado del de Spotify. El reproductor de SoundCloud no trae buscador: busco en SoundCloud (hay un link), pego el link, lo escucho o lo guardo en mi lista. Este sí tiene control de volumen. Si uno arranca, el otro se pausa.
 
 ## Archivos
 - `index.html`: estructura, pantalla de entrada y Spotify

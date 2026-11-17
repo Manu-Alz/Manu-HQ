@@ -93,6 +93,7 @@ const DEFAULT_STATE = {
   buy: [],
   watch: [],
   music: [{ id: "m-default", uri: PLAYLIST, kind: "playlist", name: "Lost Men", img: "", folder: "", date: "" }],
+  sc: [],                      // lista de SoundCloud: { id, url, name, img, date }
 };
 
 /* ---------- Niveles de idiomas ---------- */
@@ -113,7 +114,7 @@ function normalize(data) {
   const s = { ...structuredClone(DEFAULT_STATE), ...data };
   s.logs = { ...DEFAULT_STATE.logs, ...s.logs };
   for (const k of ["waza", "notes", "habits"]) s[k] = s[k] || {};
-  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "langs", "buy", "watch", "music"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
+  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "langs", "buy", "watch", "music", "sc"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
   // Las notas libres viejas de Uruguay pasan a la lista de notas (una sola vez)
   if (s.uyNotes) { (s.notes.uruguay = s.notes.uruguay || []).unshift({ id: uid(), text: s.uyNotes, date: today() }); }
   // "Estilo de vida" se reemplazó por Hábitos: sus lugares y notas pasan a Ideas, una sola vez.
@@ -147,6 +148,7 @@ const DAY_SHORT = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 let ROUTINE = DAY_NAMES.map((name, day) => ({ day, name, letter: "·", title: "Cargando Plan-73…", sub: "", tag: "gym", items: [] }));
 let PLAN = null;
 let planStatus = "offline";
+let planWarn = [];            // partes de Plan-73 que no se pudieron leer (si cambió su formato)
 let viewBlock = null;      // bloque que estás mirando en Rutina (por defecto, el actual de Plan-73)
 
 /* Bloque actual = el último que abriste en Plan-73 (misma web, mismo almacenamiento) */
@@ -254,9 +256,11 @@ async function loadPlan73() {
     const cached = JSON.parse(lsGet("manuhq-plan73v3") || "null");
     if (cached) { PLAN = cached; planStatus = "cache"; buildRoutine(); }
   } catch (e) { /* ignorar */ }
+  let fetched = false;
   try {
     loadPlan73.at = Date.now();
     const html = await fetch(PLAN73, { cache: "no-cache" }).then((r) => { if (!r.ok) throw new Error("Plan-73 " + r.status); return r.text(); });
+    fetched = true;   // si llegó la página pero algo falla después, es que cambió su formato
     const doc = new DOMParser().parseFromString(html, "text/html");
     const weekEl = doc.querySelector(".week");
     const week = [...doc.querySelectorAll(".week .day")].map((el) => ({
@@ -350,10 +354,14 @@ async function loadPlan73() {
       blocks: v.blocks.map(({ id, name, weeks, title, intro, s }) => ({ id, name, weeks, title, intro, s })),
     };
     planStatus = "live";
+    const before = planWarn.map((w) => w.name).join("|");
+    planWarn = planProblems(PLAN);
+    if (planWarn.length && planWarn.map((w) => w.name).join("|") !== before) toast(`Plan-73 cambió: no pude leer ${planWarn.length === 1 ? "una parte" : planWarn.length + " partes"}`);
     lsSet("manuhq-plan73v3", JSON.stringify(PLAN));
     buildRoutine();
   } catch (e) {
     console.warn("No pude leer Plan-73; uso la versión guardada.", e);
+    if (fetched) { planWarn = [{ name: "Todo Plan-73", where: "Rutina, Comida, Calendario y todo lo que sale de ahí" }]; toast("Plan-73 cambió: no pude leerlo"); }
   }
   updateSplash();
   // Redibujo solo si la vista usa el plan y no estás escribiendo algo (para no borrarte el texto)
@@ -367,7 +375,28 @@ const isOff = (d) => d.off ?? !(isLift(d) || isSprint(d));
 const letterOf = (d) => d.letter || "—";
 const sessionName = (d) => `<span class="letter ${isLift(d) ? "" : "plain"}">${/^\w/.test(d.letter || "") ? esc(d.letter) : "·"}</span>${esc(d.title)}`;
 const sessionText = (d) => `${isLift(d) ? `${d.letter} · ` : ""}${d.title}${d.sub ? ` (${d.sub})` : ""}`;
-const syncBadge = () => ({
+/* Revisa que se haya podido leer cada parte de Plan-73; si no, el aviso dice cuál */
+function planProblems(P) {
+  const out = [], bad = (name, where) => out.push({ name, where }), b = P.blocks[0];
+  if (P.week.length !== 7) bad("La semana", "Rutina y Calendario");
+  if (!P.blocks.length) bad("Los bloques de gimnasio", "Rutina");
+  if (b && P.week.some((w) => !w.off && !b.s[w.s] && !P.sprints?.days?.[w.d]?.rows?.length)) bad("Los días atléticos", "Rutina");
+  if (P.week.some((w) => w.off) && !P.rest?.html) bad("La sesión de flexibilidad", "Rutina");
+  if (!P.stretch?.zones?.length) bad("Los estiramientos", "Rutina");
+  if (!P.nutrition?.days?.length) bad("Los días de comida armados", "Comida");
+  if (!P.nutrition?.options?.length) bad("Las recetas y opciones", "Comida");
+  if (!P.nutrition?.cook?.length) bad("La cocina de la semana", "Comida");
+  if (!P.nutrition?.daily?.length) bad("Los números diarios", "Hábitos y Comida");
+  if (!P.stats?.length) bad("El peso y las metas de arriba", "Cambio físico");
+  if (!P.strength?.rows?.length) bad("Los objetivos de fuerza", "Cambio físico");
+  return out;
+}
+const planWarnHTML = () => `
+  <p>El HQ lee Plan-73 cada vez que lo abrís, pero no pudo entender ${planWarn.length === 1 ? "esta parte" : "estas partes"}. Seguramente cambió cómo está escrita en la página:</p>
+  <ul class="rc-ing">${planWarn.map((w) => `<li><b>${esc(w.name)}</b> <span class="muted">· se ve en: ${esc(w.where)}</span></li>`).join("")}</ul>
+  <p class="muted">Mientras tanto, eso puede verse vacío o desactualizado. Lo demás sigue funcionando. Para arreglarlo hay que ajustar cómo el HQ lee esa parte.</p>
+  <p><a class="btn" href="${PLAN73}" target="_blank" rel="noopener">Abrir Plan-73 ↗</a></p>`;
+const syncBadge = () => planWarn.length ? `<button class="sync warn" type="button" data-act="plan-warn" title="Tocá para ver qué no se pudo leer">⚠ Plan-73: no pude leer ${planWarn.length === 1 ? "una parte" : planWarn.length + " partes"}</button>` : ({
   live: `<span class="sync ok">● Sincronizado con Plan-73</span>`,
   cache: `<span class="sync">● Plan-73 (guardado)</span>`,
   offline: `<span class="sync off">● Sin conexión a Plan-73</span>`,
@@ -1377,6 +1406,7 @@ function act(el) {
       else { S.logs.gym.push({ id: uid(), date: today(), session: sessionText(ROUTINE[new Date().getDay()]) }); toast("Día marcado ✓"); }
       break;
     case "sel-day": selDay = +el.dataset.day; render(); return;
+    case "plan-warn": openPop("Plan-73 cambió", planWarnHTML); return;
     case "week-nav": { const dir = +el.dataset.dir; weekOff = dir === 0 ? 0 : Math.min(0, weekOff + dir); render(); return; }
     case "gym-day": {     // marcar o desmarcar un entreno de hoy o de un día que ya pasó
       const date = el.dataset.date;
@@ -1564,7 +1594,7 @@ function applyRemote(data, keepBase) {
   lsSet(STORE_KEY, JSON.stringify(S)); if (!keepBase) setBase();
   const a = document.activeElement;   // si estás escribiendo, no te borro el campo: se redibuja con tu próximo cambio
   if (!(a && a.closest("#view") && /INPUT|TEXTAREA/.test(a.tagName) && a.value)) render();
-  renderMusic();
+  renderMusic(); renderSc();
 }
 async function syncPush() {
   clearTimeout(pushT); pushT = null;
@@ -1750,6 +1780,7 @@ const musicEl = $("#music");
 const musicOpen = () => musicEl.classList.contains("open");
 let musicFocus = null;
 function openMusic() {
+  if (scOpen()) closeSc();   // un menú a la vez
   musicFocus = document.activeElement;
   musicEl.classList.add("open"); musicEl.setAttribute("aria-hidden", "false");
   $("#mini-open").setAttribute("aria-expanded", "true");
@@ -1822,6 +1853,7 @@ function initMusic() {
         const d = e.data, was = isPlaying;
         isPlaying = !d.isPaused;
         if (isPlaying) wantPlay = false;   // ya arrancó: no volver a forzar el play si después pausás
+        if (isPlaying && !was) scPause();   // que no suenen Spotify y SoundCloud a la vez
         $("#mini-prog").style.width = d.duration ? Math.min(100, (d.position / d.duration) * 100) + "%" : "0%";
         if (was !== isPlaying) { updateMini(); if (musicOpen()) renderMusic(); }
       });
@@ -1830,6 +1862,163 @@ function initMusic() {
   const s = document.createElement("script"); s.src = "https://open.spotify.com/embed/iframe-api/v1"; s.async = true; document.head.appendChild(s);
   musicReady = true; updateMini(); renderMusic();
 }
+
+/* =========================================================
+   SoundCloud: segundo reproductor, al lado del de Spotify.
+   El widget de SoundCloud solo reproduce links: no trae buscador y
+   su búsqueda por API pide credenciales. Entonces: busco en SoundCloud
+   (link "Buscar en SoundCloud"), pego el link acá, lo escucho o lo guardo
+   en mi lista. Y a diferencia de Spotify, este sí deja subir y bajar el volumen.
+   ========================================================= */
+var scReady = false;
+const SC_LAST = "manuhq-lastsc", SC_VOL = "manuhq-scvol";   // lo último que sonó y el volumen: de este dispositivo
+const SC_RE = /https?:\/\/(?:www\.|m\.)?soundcloud\.com\/[^\s"'<>]+/gi;
+const scClean = (u) => { try { return "https://soundcloud.com" + new URL(u).pathname.replace(/\/+$/, ""); } catch (e) { return null; } };
+const scLinks = (txt) => [...new Set([...String(txt).matchAll(SC_RE)].map((m) => scClean(m[0])).filter((u) => u && u.split("/").length >= 4))];
+const scShort = (u) => u.replace("https://soundcloud.com/", "");
+let scw = null, scApiP = null, scPlaying = false;
+let scNow = (() => { try { return JSON.parse(lsGet(SC_LAST)); } catch (e) { return null; } })();   // { url, title }
+if (!scNow || !scLinks(scNow.url || "").length) scNow = null;
+const scq = { q: "" };
+const scEl = $("#sc");
+const scOpen = () => scEl.classList.contains("open");
+const scVol = () => { const raw = lsGet(SC_VOL), v = raw === null ? 100 : +raw; return Number.isFinite(v) ? Math.max(0, Math.min(100, v)) : 100; };
+const scName = () => scNow?.title || S.sc.find((x) => x.url === scNow?.url)?.name || "";
+const spPause = () => { if (embedCtl && isPlaying) { wantPlay = false; embedCtl.pause(); } };   // que no suenen los dos a la vez
+const scPause = () => { if (scw && scPlaying) scw.pause(); };
+
+function updateSc() {
+  $("#scmini").classList.toggle("on", scPlaying);
+  $("#scmini-title").textContent = scName() || "SoundCloud";
+  $("#scmini-open").title = scName();
+  $("#scmini-play").setAttribute("aria-label", scPlaying ? "Pausar SoundCloud" : "Reproducir SoundCloud");
+}
+function scApi() {   // la API de SoundCloud se carga recién cuando la usás
+  if (window.SC?.Widget) return Promise.resolve();
+  return scApiP || (scApiP = new Promise((res, rej) => {
+    const s = document.createElement("script"); s.src = "https://w.soundcloud.com/player/api.js"; s.onload = res;
+    s.onerror = () => { scApiP = null; rej(new Error("SoundCloud no cargó")); };
+    document.head.appendChild(s);
+  }));
+}
+const scSrc = (url) => "https://w.soundcloud.com/player/?" + new URLSearchParams({ url, auto_play: "true", show_comments: "false", hide_related: "true", visual: "false", show_teaser: "false" });
+function scBind() {
+  const E = SC.Widget.Events, refresh = () => { updateSc(); if (scOpen()) renderSc(); };
+  scw.bind(E.READY, () => { scw.setVolume(scVol()); scInfo(); });
+  scw.bind(E.PLAY, () => { scPlaying = true; spPause(); refresh(); scInfo(); });
+  scw.bind(E.PAUSE, () => { scPlaying = false; refresh(); });
+  scw.bind(E.FINISH, () => { scPlaying = false; refresh(); });
+  scw.bind(E.PLAY_PROGRESS, (e) => { $("#scmini-prog").style.width = Math.min(100, (e.relativePosition || 0) * 100) + "%"; });
+  scw.bind(E.ERROR, () => toast("SoundCloud no pudo reproducir ese link"));
+}
+function scInfo() {   // el título de lo que suena (en una playlist, la canción de ahora)
+  if (!scw) return;
+  scw.getCurrentSound((s) => {
+    if (!s || !scNow) return;
+    scNow.title = s.title + (s.user?.username ? " · " + s.user.username : "");
+    lsSet(SC_LAST, JSON.stringify(scNow)); updateSc();
+  });
+}
+async function scPlayUrl(url) {
+  if (url === scNow?.url && scw) { scw.toggle(); return; }   // el mismo: pausa o sigue
+  scNow = { url, title: "" }; lsSet(SC_LAST, JSON.stringify(scNow)); scPlaying = false; updateSc(); renderSc();
+  try { await scApi(); } catch (e) { toast("No pude cargar SoundCloud. Probá de nuevo."); return; }
+  const box = $("#sc-player");
+  if (!scw) {
+    box.innerHTML = "";
+    const f = document.createElement("iframe");
+    f.title = "SoundCloud"; f.allow = "autoplay"; f.src = scSrc(url); box.appendChild(f);
+    scw = SC.Widget(f); scBind();
+  } else scw.load(url, { auto_play: true, show_comments: false, hide_related: true, visual: false });
+}
+
+/* Nombre y portada de cada link, desde el oEmbed público de SoundCloud */
+const scEnriched = new Set();
+async function enrichSc(it) {
+  if (scEnriched.has(it.id) || (it.name && it.img)) return;
+  scEnriched.add(it.id);
+  try {
+    const r = await fetch("https://soundcloud.com/oembed?format=json&url=" + encodeURIComponent(it.url));
+    const x = S.sc.find((m) => m.id === it.id); if (!x) return;
+    if (r.status === 404) x.name = x.name || "Link no encontrado";
+    else { const j = await r.json(); x.name = x.name || j.title || ""; x.img = j.thumbnail_url || ""; }
+    save(); renderSc(); updateSc();
+  } catch (e) { /* sin conexión: queda para la próxima vez que abras el menú */ }
+}
+function renderSc() {
+  if (!scReady) return;
+  const q = scq.q.trim(), urls = scLinks(q), isUrl = urls.length > 0;
+  const terms = plain(q).split(/\s+/).filter(Boolean);
+  const list = isUrl ? [] : S.sc.filter((x) => terms.every((t) => plain(`${x.name} ${scShort(x.url)}`).includes(t)));
+  const row = (x) => `<li class="mm-row ${x.url === scNow?.url ? "on" : ""}">
+    <button class="mm-main" type="button" data-s="play" data-id="${x.id}">
+      <span class="mm-cov" ${x.img ? `style="background-image:url('${esc(x.img)}')"` : ""}></span>
+      <span class="mm-t"><b>${esc(x.name || "Cargando…")}</b><small>${esc(scShort(x.url))}</small></span>
+      ${x.url === scNow?.url && scPlaying ? `<span class="eq on" aria-hidden="true"><i></i><i></i><i></i></span>` : ""}
+    </button>
+    <button class="mm-act" type="button" data-s="del" data-id="${x.id}" title="Quitar de la lista" aria-label="Quitar">✕</button></li>`;
+  let html = list.map(row).join("");
+  if (isUrl) {
+    const u = urls[0], saved = S.sc.some((x) => x.url === u);
+    html = `<li class="sc-url"><span class="small muted">Link de SoundCloud</span><b>${esc(scShort(u))}</b>
+      <div class="inline"><button class="btn btn-primary btn-sm" type="button" data-s="play-url" data-url="${esc(u)}">▶ Reproducir</button>
+      ${saved ? `<span class="small muted">Ya está en tu lista</span>` : `<button class="btn btn-sm" type="button" data-s="save-url" data-url="${esc(u)}">Guardar en mi lista</button>`}</div></li>`;
+  } else if (!html) html = `<li class="mm-empty">${S.sc.length ? "No hay nada con ese filtro." : "Tu lista está vacía. Buscá música en SoundCloud, copiá el link y pegalo acá."}</li>`;
+  if (!isUrl) html += `<li class="mm-ext"><a href="https://soundcloud.com/search${q ? "?q=" + encodeURIComponent(q) : ""}" target="_blank" rel="noopener">${q ? `Buscar «${esc(q)}» en SoundCloud ↗` : "Buscar música en SoundCloud ↗"}</a></li>`;
+  $("#sc-list").innerHTML = html;
+}
+let scFocus = null;
+function openSc() {
+  if (musicOpen()) closeMusic();
+  scFocus = document.activeElement;
+  scEl.classList.add("open"); scEl.setAttribute("aria-hidden", "false");
+  $("#scmini-open").setAttribute("aria-expanded", "true");
+  renderSc(); S.sc.forEach(enrichSc);
+  $("#sc .music-panel").focus({ preventScroll: true });
+}
+function closeSc() {
+  scEl.classList.remove("open"); scEl.setAttribute("aria-hidden", "true");
+  $("#scmini-open").setAttribute("aria-expanded", "false");
+  (scFocus && scFocus.isConnected ? scFocus : $("#scmini-open")).focus({ preventScroll: true });
+}
+$("#scmini-open").addEventListener("click", () => (scOpen() ? closeSc() : openSc()));
+$("#scmini-play").addEventListener("click", () => {
+  if (scw) scw.toggle();
+  else if (scNow?.url) scPlayUrl(scNow.url);   // retoma lo último que escuchaste
+  else openSc();
+});
+$("#sc-close").addEventListener("click", closeSc);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && scOpen()) closeSc(); });
+$("#sc-q").addEventListener("input", (e) => { scq.q = e.target.value; renderSc(); });
+$("#sc-vol").value = scVol(); $("#sc-vol-n").textContent = scVol();
+$("#sc-vol").addEventListener("input", (e) => { const v = +e.target.value; $("#sc-vol-n").textContent = v; lsSet(SC_VOL, String(v)); if (scw) scw.setVolume(v); });
+$("#sc-add-btn").addEventListener("click", () => { const f = $("#sc-add"); f.hidden = !f.hidden; if (!f.hidden) f.links.focus(); });
+function scSave(urls) {
+  const have = new Set(S.sc.map((x) => x.url)), added = [];
+  for (const url of urls) { if (have.has(url)) continue; have.add(url); added.push({ id: uid(), url, name: "", img: "", date: today() }); }
+  if (added.length) { S.sc.unshift(...added); save(); renderSc(); added.forEach(enrichSc); }
+  return { added: added.length, dup: urls.length - added.length };
+}
+$("#sc-add").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const f = e.target, urls = scLinks(f.links.value);
+  if (!urls.length) { toast("No encontré links de SoundCloud"); return; }
+  const r = scSave(urls);
+  f.reset(); f.hidden = true;
+  toast(`${r.added} agregado${r.added === 1 ? "" : "s"}${r.dup ? ` · ${r.dup} ya estaba${r.dup === 1 ? "" : "n"}` : ""}`);
+});
+scEl.addEventListener("click", (e) => {
+  if (e.target === scEl) { closeSc(); return; }   // clic en lo opaco de atrás
+  const b = e.target.closest("[data-s]"); if (!b) return;
+  const x = S.sc.find((m) => m.id === b.dataset.id);
+  switch (b.dataset.s) {
+    case "play": if (x) scPlayUrl(x.url); break;
+    case "play-url": scPlayUrl(b.dataset.url); break;
+    case "save-url": scSave([b.dataset.url]); toast("Guardado en tu lista"); break;
+    case "del": if (x) { S.sc = S.sc.filter((m) => m.id !== x.id); save(); renderSc(); updateSc(); toast("Quitado de la lista"); } break;
+  }
+});
+scReady = true; updateSc(); renderSc();
 
 
 /* =========================================================
