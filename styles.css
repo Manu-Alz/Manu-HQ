@@ -700,3 +700,51 @@ details.phase-d > summary:hover { border-color: var(--accent); }
 .dlg-close { margin-top: 14px; }
 #sync-btn[data-st="ok"] { color: var(--green); }
 #sync-btn[data-st="err"], #sync-btn[data-st="auth"] { color: var(--amber); }
+
+/* ===================================================== */
+/* Comida                                                 */
+/* ===================================================== */
+.meal-t td:first-child { color: var(--muted); white-space: nowrap; }
+.meal-t td:nth-child(2) { color: var(--text); }
+.meal-t tr.total td { font-weight: 600; color: var(--text); border-top: 1px solid var(--line-2); border-bottom: 0; }
+.cook-today { border-color: rgba(77,124,255,.45); background: linear-gradient(180deg, rgba(77,124,255,.09), transparent 75%), var(--card); }
+.cook { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 13.5px; color: #c3c9da; }
+.cook li { padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.cook li b { color: var(--text); font-weight: 600; }
+.cook li.today { border-color: rgba(77,124,255,.5); background: var(--accent-soft); }
+details.opt { border-top: 1px solid var(--line); }
+details.opt:first-of-type { border-top: 0; }
+details.opt summary { cursor: pointer; padding: 12px 2px; font-weight: 500; display: flex; gap: 12px; align-items: baseline; }
+details.opt[open] summary { color: var(--accent); }
+details.opt .table-wrap { padding-bottom: 8px; }
+
+/* ===================================================== */
+/* Hábitos                                                */
+/* ===================================================== */
+.hdate { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.hdate b { flex: 1; text-align: center; font: 600 15px var(--display); }
+.hnav { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 10px; background: var(--card-2); color: var(--text); font-size: 18px; line-height: 1; cursor: pointer; }
+.hnav:hover:not(:disabled) { border-color: var(--line-2); background: var(--card-3); }
+.hnav:disabled { opacity: .3; cursor: default; }
+.hprog { height: 6px; border-radius: 6px; background: var(--card-3); overflow: hidden; margin-bottom: 14px; }
+.hprog i { display: block; height: 100%; background: var(--green); transition: width .25s ease; }
+.hlist { display: grid; gap: 8px; }
+.hb { display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--card-2); color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: border-color .15s, background .15s; }
+.hb:hover { border-color: var(--line-2); }
+.hb .ck { width: 24px; height: 24px; flex: none; display: grid; place-items: center; border: 1.5px solid var(--dim); border-radius: 8px; color: transparent; transition: background .15s, border-color .15s; }
+.hb .ck svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.hb.on { border-color: rgba(94,224,160,.45); background: rgba(94,224,160,.07); }
+.hb.on .ck { background: var(--green); border-color: var(--green); color: #06210f; }
+.hb .hn { font-weight: 500; }
+.hb .hg { margin-left: auto; color: var(--muted); font-size: 12.5px; text-align: right; }
+.hgrid th { padding: 4px 2px; text-align: center; border-bottom: 0; font-size: 11px; }
+.hgrid th.today { color: var(--accent); }
+.hgrid td { padding: 8px 2px; text-align: center; vertical-align: middle; border-bottom: 0; border-top: 1px solid var(--line); }
+.hgrid td.hnm { text-align: left; padding-right: 8px; }
+.hgrid td.hs { color: var(--accent); font-family: var(--mono); }
+.hdot { display: inline-block; width: 11px; height: 11px; border: 1.5px solid var(--line-2); border-radius: 50%; }
+.hdot.on { background: var(--green); border-color: var(--green); }
+.hdot.fut { opacity: .35; }
+.hoff { color: var(--dim); }
+@media (max-width: 600px) { .hb { padding: 12px; gap: 12px; } .hb .hg { max-width: 45%; } }
+@media (max-width: 600px) { .meal-t td:first-child { white-space: normal; min-width: 84px; } .meal-t td { padding: 9px 6px; } }

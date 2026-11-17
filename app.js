@@ -45,7 +45,8 @@ const ICONS = {
   judo: "M3 9h18v4H3zM10 13l-2.5 8M14 13l2.5 8M12 3v6",
   fisico: "M3 3v18h18M7 15l4-4 3 3 5-6",
   surf: "M2 8c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 13c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 18c2-2 4-2 6 0s4 2 6 0 4-2 6 0",
-  uruguay: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4",
+  comida: "M7 2v7a2 2 0 0 0 4 0V2M9 9v13M17 22V2c-2.5 1.5-4 4-4 8v4h4",
+  habitos: "M22 11.1V12a10 10 0 1 1-5.9-9.1M22 4L12 14l-3-3",
   estudio: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5zM4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5",
   proyectos: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
   contenido: "M3 6h13v12H3zM16 10l5-3v10l-5-3",
@@ -56,8 +57,8 @@ const ICONS = {
 };
 const NAV = [
   { group: null, items: [["inicio", "Inicio"]] },
-  { group: "Cuerpo", items: [["rutina", "Rutina / Gym"], ["judo", "Judo"], ["fisico", "Cambio físico"], ["surf", "Surf"]] },
-  { group: "Vida", items: [["uruguay", "Estilo de vida"], ["estudio", "Estudio"], ["idiomas", "Idiomas"], ["compras", "Compras"], ["watch", "Watch list"]] },
+  { group: "Cuerpo", items: [["rutina", "Rutina / Gym"], ["comida", "Comida"], ["judo", "Judo"], ["fisico", "Cambio físico"], ["surf", "Surf"]] },
+  { group: "Vida", items: [["habitos", "Hábitos"], ["estudio", "Estudio"], ["idiomas", "Idiomas"], ["compras", "Compras"], ["watch", "Watch list"]] },
   { group: "Trabajo", items: [["proyectos", "Proyectos"], ["contenido", "Contenido"], ["ideas", "Ideas"]] },
 ];
 
@@ -83,7 +84,7 @@ const DEFAULT_STATE = {
   study: [],
   waza: {},
   spots: [{ id: uid(), text: "La Paloma", done: false }, { id: uid(), text: "Punta del Diablo", done: false }, { id: uid(), text: "Playa Brava", done: false }],
-  places: [],
+  habits: {},                // { "2026-11-17": ["agua", "sueno"] }: lo que cumplí cada día
   notes: {},
   langs: [],
   buy: [],
@@ -108,10 +109,16 @@ function fixLang(l) {
 function normalize(data) {
   const s = { ...structuredClone(DEFAULT_STATE), ...data };
   s.logs = { ...DEFAULT_STATE.logs, ...s.logs };
-  for (const k of ["waza", "notes"]) s[k] = s[k] || {};
-  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "places", "langs", "buy", "watch", "music"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
+  for (const k of ["waza", "notes", "habits"]) s[k] = s[k] || {};
+  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "langs", "buy", "watch", "music"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
   // Las notas libres viejas de Uruguay pasan a la lista de notas (una sola vez)
   if (s.uyNotes) { (s.notes.uruguay = s.notes.uruguay || []).unshift({ id: uid(), text: s.uyNotes, date: today() }); }
+  // "Estilo de vida" se reemplazó por Hábitos: sus lugares y notas pasan a Ideas, una sola vez.
+  // El id fijo evita duplicados si dos dispositivos lo migran por separado.
+  const keep = (o) => { if (!s.ideas.some((i) => i.id === "mig-" + o.id)) s.ideas.push({ id: "mig-" + o.id, text: o.text, tag: "uruguay", date: o.date || today() }); };
+  if (Array.isArray(s.places)) s.places.forEach(keep);
+  if (Array.isArray(s.notes.uruguay)) s.notes.uruguay.forEach(keep);
+  delete s.places; delete s.notes.uruguay;
   s.langs.forEach(fixLang);
   delete s.uyNotes; delete s.planStart;
   return s;
@@ -165,7 +172,7 @@ function clean(node) {
     return `<${t}${cls}>${inner}</${t}>`;
   }).join("");
 }
-const cellLines = (td) => clean(td).split(/<br>/).map((s) => s.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").trim()).filter(Boolean);
+const cellLines = (td) => clean(td).split(/<br>/).map((s) => s.replace(/<[^>]+>/g, "").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").trim()).filter(Boolean);
 const rowsOf = (table) => table ? [...table.querySelectorAll("tbody tr")].map((tr) => [...tr.children].map(cellLines)) : [];
 /* Primera tabla que aparece después de un título h3 */
 function tableAfter(root, re) {
@@ -315,7 +322,25 @@ async function loadPlan73() {
     const daily = panelBy(food, /n[uú]meros diarios/i);
     const control = panelBy(food, /control de peso/i);
     const objSec = secBy(/^objetivos/i);
-    const nutrition = { daily: rowsOf(daily?.querySelector("table")), control: control ? clean(control.querySelector("ul") || control) : "" };
+    // Comida: días ya armados, opciones para elegir, cocina de la semana y cómo armar el día
+    const after = (root, re) => {
+      const h = root && [...root.querySelectorAll("h3")].find((x) => re.test(x.textContent)), out = [];
+      for (let n = h?.nextElementSibling; n && n.nodeName !== "H3"; n = n.nextElementSibling) out.push(n);
+      return out;
+    };
+    const dishes = (root, re) => after(root, re).flatMap((n) => (n.matches("details.dia") ? [n] : [...n.querySelectorAll("details.dia")])).map((d) => {
+      const sm = d.querySelector("summary"), sp = sm.querySelector("span");
+      return { title: [...sm.childNodes].filter((c) => c !== sp).map((c) => c.textContent).join("").trim(), sub: sp?.textContent.trim() || "", rows: rowsOf(d.querySelector("table")), note: d.querySelector(".in")?.textContent.trim() || "" };
+    });
+    const cookP = panelBy(food, /cocina de la semana/i);
+    const nutrition = {
+      daily: rowsOf(daily?.querySelector("table")),
+      control: control ? clean(control.querySelector("ul") || control) : "",
+      days: dishes(food, /d[ií]as ya armados/i),
+      options: dishes(food, /opciones para elegir/i),
+      cook: cookP ? [...cookP.querySelectorAll("li")].map((li) => ({ label: li.querySelector("b")?.textContent.replace(/:\s*$/, "").trim() || "", html: clean(li).replace(/^\s*<b>.*?<\/b>\s*/, "") })) : [],
+      slots: food ? rowsOf(tableAfter(food, /c[oó]mo armar/i)) : [],
+    };
     const strength = { title: objSec?.querySelector("h2").textContent.trim() || "", head: objSec ? [...objSec.querySelectorAll("thead th")].map((t) => t.textContent.trim()) : [], rows: rowsOf(objSec?.querySelector("table")) };
     PLAN = {
       week, rules: rules ? clean(rules) : "", W: v.W, SS: v.SS, sprints, rest, updated, stats, stretch, exec, nutrition, strength,
@@ -330,7 +355,7 @@ async function loadPlan73() {
   updateSplash();
   // Redibujo solo si la vista usa el plan y no estás escribiendo algo (para no borrarte el texto)
   const typing = document.activeElement?.matches("input, textarea, select");
-  if (["inicio", "rutina"].includes(route()) && !typing) render();
+  if (["inicio", "rutina", "fisico", "comida", "habitos"].includes(route()) && !typing) render();
   else $("#top-sync").innerHTML = syncBadge();
 }
 const isLift = (d) => /^[A-D]$/.test(d.letter);
@@ -464,6 +489,15 @@ let wazaF = { belt: "todos", group: "todos", status: "todos", q: "" };
 let quoteIdx = Math.floor(Math.random() * JUDO_QUOTES.length);
 /* ---------- Idiomas ---------- */
 let selLang = null, vocabQ = "";
+let foodSel = null, habitDay = null;   // día armado que miro en Comida / día que chequeo en Hábitos (null = hoy)
+const slug = (s) => String(s).toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+/* Los hábitos salen de "Números diarios" de Plan-73: si cambian allá, cambian acá */
+function habitList() {
+  const rows = PLAN?.nutrition?.daily || [];
+  const list = rows.map((r) => { const name = (r[0] || []).join(" ").trim(); return { key: slug(name), name, goal: (r[1] || []).join(" ").trim() }; }).filter((h) => h.key);
+  const base = list.length ? list : ["Calorías", "Proteína", "Creatina", "Agua", "Sueño"].map((name) => ({ key: slug(name), name, goal: "" }));
+  return [{ key: "entreno", name: "Entrené", goal: "", gym: true }, ...base];
+}
 function streakOf(days) {
   const set = new Set(days); let n = 0; const d = new Date();
   if (!set.has(today())) d.setDate(d.getDate() - 1);   // la racha sigue si hoy todavía no practicaste
@@ -702,13 +736,93 @@ const VIEWS = {
     </div>`;
   },
 
-  uruguay() {
+  comida() {
+    const N = PLAN?.nutrition, days = N?.days || [], dow = new Date().getDay();
+    const WD = ["domingo", "lunes", "martes", "mi[ée]rcoles", "jueves", "viernes", "s[áa]bado"];
+    const has = (txt, d) => new RegExp("\\b" + WD[d] + "\\b", "i").test(txt);
+    const ti = days.findIndex((x) => has(`${x.title} ${x.sub}`, dow));       // el día armado que corresponde a hoy
+    const sel = Math.min(foodSel ?? Math.max(ti, 0), Math.max(days.length - 1, 0)), D = days[sel], isToday = sel === ti;
+    const cook = N?.cook || [], cookToday = cook.find((c) => has(c.label, dow));
+    const cell = (c) => esc((c || []).join(" "));
+    const planned = ROUTINE[dow];
     return `
-    ${head("Estilo de vida", "Lugares, planes, mate, playa y todo lo que hace a la vida en Uruguay.", "", "Uruguay")}
+    ${head("Comida", "Cocina de hoy, según Plan-73. Los números son aproximados.", syncBadge())}
+    ${!D ? `<div class="card"><p class="empty">${PLAN ? "Plan-73 no tiene días de comida armados." : "Cargando Plan-73…"}</p></div>` : `
+    ${cookToday ? `<div class="card cook-today" style="margin-bottom:16px"><div class="card-head"><span class="label-sm">Hoy se cocina · ${DAY_NAMES[dow]}</span></div><div class="plan-html" style="margin:0">${cookToday.html}</div></div>` : ""}
     <div class="bento">
-      ${checklist("places", "Lugares y planes", "Ej: Cabo Polonio en invierno", "c-4")}
-      ${tasksCard("uruguay", "Pendientes", "c-4")}
-      ${notesCard("uruguay", "Notas", "c-4")}
+      <div class="card c-8">
+        <div class="card-head"><div>
+          <span class="label-sm">${isToday ? `Hoy · ${DAY_NAMES[dow]}${planned && !isOff(planned) ? ` · entrenás ${esc(planned.title)}` : ""}` : "Día armado"}</span>
+          <h2 style="font-size:22px;margin-top:6px">${esc(D.title)}</h2>
+          ${D.sub ? `<div class="muted" style="margin-top:4px">${esc(D.sub)}</div>` : ""}
+        </div></div>
+        <div class="table-wrap"><table class="meal-t"><tbody>
+          ${D.rows.map((r) => `<tr class="${/^total$/i.test((r[0] || []).join(" ").trim()) ? "total" : ""}"><td>${cell(r[0])}</td><td>${cell(r[1])}</td><td class="num">${cell(r[2])}</td></tr>`).join("")}
+        </tbody></table></div>
+        <div class="filters" style="margin:16px 0 0">
+          ${days.map((x, i) => `<button class="chip ${i === sel ? "on" : ""}" data-act="food-day" data-i="${i}">${esc(x.title)}${i === ti ? `<span class="dot" style="background:var(--accent)" title="Es el de hoy"></span>` : ""}</button>`).join("")}
+        </div>
+      </div>
+      <div class="c-4 side stack">
+        ${cook.length ? `<div class="card"><div class="card-head"><h2>Cocina de la semana</h2><span class="sub">Plan-73</span></div>
+          <ul class="cook">${cook.map((c) => `<li class="${c === cookToday ? "today" : ""}"><b>${esc(c.label)}:</b> ${c.html}</li>`).join("")}</ul></div>` : ""}
+        ${N?.slots?.length ? `<div class="card"><div class="card-head"><h2>Cómo armar el día</h2></div>
+          <ul class="mini-rows">${N.slots.map((r) => `<li><span class="lbl">${cell(r[0])}</span><span class="val">${cell(r[1])}</span><span class="mono">${cell(r[2])}</span></li>`).join("")}</ul></div>` : ""}
+        ${notesCard("comida", "Notas de comida")}
+      </div>
+    </div>
+    ${N?.options?.length ? `<div class="bento"><div class="card c-12">
+      <div class="card-head"><h2>Opciones para elegir</h2><span class="sub">${N.options.length} grupos</span></div>
+      ${N.options.map((o) => `<details class="opt"><summary>${esc(o.title)}<span class="muted small mono">${esc(o.sub)}</span></summary>
+        <div class="table-wrap"><table><tbody>${o.rows.map((r) => `<tr><td><b>${cell(r[0])}</b></td><td class="muted">${cell(r[1])}</td><td class="num">${cell(r[2])}</td></tr>`).join("")}</tbody></table></div>
+        ${o.note ? `<p class="small muted" style="margin:10px 0 0">${esc(o.note)}</p>` : ""}</details>`).join("")}
+    </div></div>` : ""}`}`;
+  },
+
+  habitos() {
+    const hd = habitDay || today(), isNow = hd === today(), todayD = today(), hs = habitList();
+    const dowOf = (d) => new Date(d + "T12:00:00").getDay();
+    const offGym = (h, d) => h.gym && isOff(ROUTINE[dowOf(d)]);             // en un día sin gimnasio no se pide "Entrené"
+    const done = (h, d) => (h.gym ? S.logs.gym.some((l) => l.date === d) : (S.habits[d] || []).includes(h.key));
+    const list = hs.filter((h) => !offGym(h, hd)), n = list.filter((h) => done(h, hd)).length;
+    const goalOf = (h) => (h.gym ? ROUTINE[dowOf(hd)]?.title || "" : h.goal);
+    const streak = (h) => {   // días seguidos hasta hoy (si hoy todavía no lo hiciste, cuenta desde ayer)
+      const d = new Date(); let c = 0;
+      if (!done(h, iso(d)) && !offGym(h, iso(d))) d.setDate(d.getDate() - 1);
+      for (let i = 0; i < 400; i++, d.setDate(d.getDate() - 1)) {
+        const k = iso(d);
+        if (offGym(h, k)) continue;
+        if (!done(h, k)) break;
+        c++;
+      }
+      return c;
+    };
+    const long0 = new Date(hd + "T12:00:00").toLocaleDateString("es-UY", { weekday: "long", day: "numeric", month: "long" }), long = long0.charAt(0).toUpperCase() + long0.slice(1);
+    const dates = weekDates();
+    return `
+    ${head("Hábitos", "Check-in de cada día: lo que pide Plan-73 todos los días.", syncBadge())}
+    <div class="bento">
+      <div class="card c-7">
+        <div class="hdate">
+          <button class="hnav" data-act="habit-day" data-dir="-1" aria-label="Día anterior">‹</button>
+          <b>${isNow ? "Hoy · " : ""}${esc(long)}</b>
+          <button class="hnav" data-act="habit-day" data-dir="1" aria-label="Día siguiente" ${isNow ? "disabled" : ""}>›</button>
+        </div>
+        <div class="hprog"><i style="width:${list.length ? (n / list.length) * 100 : 0}%"></i></div>
+        <div class="card-head" style="margin-bottom:12px"><span class="label-sm">${n} de ${list.length} cumplidos</span>${isNow ? "" : `<button class="btn btn-sm btn-ghost" data-act="habit-day" data-dir="0">Volver a hoy</button>`}</div>
+        <div class="hlist">
+          ${list.map((h) => `<button class="hb ${done(h, hd) ? "on" : ""}" data-act="habit" data-k="${esc(h.key)}" aria-pressed="${done(h, hd)}"><span class="ck"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span><span class="hn">${esc(h.name)}</span>${goalOf(h) ? `<span class="hg">${esc(goalOf(h))}</span>` : ""}</button>`).join("")}
+        </div>
+        ${PLAN?.nutrition?.daily?.length ? "" : `<p class="small muted" style="margin:14px 0 0">No pude leer los números de Plan-73: uso los básicos.</p>`}
+      </div>
+      <div class="c-5 side stack">
+        <div class="card">
+          <div class="card-head"><h2>Esta semana</h2></div>
+          <table class="hgrid"><thead><tr><th></th>${dates.map((d, i) => `<th class="${d === todayD ? "today" : ""}">${"LMMJVSD"[i]}</th>`).join("")}<th title="Días seguidos">Racha</th></tr></thead>
+          <tbody>${hs.map((h) => `<tr><td class="hnm">${esc(h.name)}</td>${dates.map((d) => (offGym(h, d) ? `<td><span class="hoff">–</span></td>` : `<td><span class="hdot ${done(h, d) ? "on" : ""} ${d > todayD ? "fut" : ""}"></span></td>`)).join("")}<td class="hs">${streak(h)}</td></tr>`).join("")}</tbody></table>
+        </div>
+        ${notesCard("habitos", "Notas")}
+      </div>
     </div>`;
   },
 
@@ -1072,6 +1186,25 @@ function act(el) {
       else { S.logs.gym.push({ id: uid(), date: today(), session: sessionText(ROUTINE[new Date().getDay()]) }); toast("Día marcado ✓"); }
       break;
     case "sel-day": selDay = +el.dataset.day; render(); return;
+    case "food-day": foodSel = +el.dataset.i; render(); return;
+    case "habit-day": {
+      const dir = +el.dataset.dir;
+      if (!dir) habitDay = null;
+      else { const d = new Date((habitDay || today()) + "T12:00:00"); d.setDate(d.getDate() + dir); habitDay = iso(d) >= today() ? null : iso(d); }
+      render(); return;
+    }
+    case "habit": {
+      const k = el.dataset.k, d = habitDay || today();
+      if (k === "entreno") {
+        if (S.logs.gym.some((l) => l.date === d)) S.logs.gym = S.logs.gym.filter((l) => l.date !== d);
+        else S.logs.gym.push({ id: uid(), date: d, session: sessionText(ROUTINE[new Date(d + "T12:00:00").getDay()]) });
+      } else {
+        const a = S.habits[d] || [];
+        S.habits[d] = a.includes(k) ? a.filter((x) => x !== k) : [...a, k];
+        if (!S.habits[d].length) delete S.habits[d];
+      }
+      break;
+    }
     case "goto-rutina": selDay = +el.dataset.day; render.keepDay = true; location.hash = "rutina"; return;
     case "toggle-study": byId(S.study).done = el.checked; break;
     case "del-study": S.study = drop(S.study); break;
