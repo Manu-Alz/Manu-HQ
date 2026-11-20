@@ -934,3 +934,37 @@ details.opt .table-wrap { padding-bottom: 8px; }
   .mini .eq { display: none; }
   .mini-open { min-width: 22px; padding: 6px 4px 6px 8px; gap: 0; }
 }
+
+/* ===================================================== */
+/* Diario                                                 */
+/* ===================================================== */
+.jnew textarea { width: 100%; min-height: 130px; resize: vertical; font-size: 15px; line-height: 1.6; }
+.jnew-row { display: flex; align-items: center; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+.jnew-row label { display: inline-flex; align-items: center; gap: 8px; }
+.jnew-row input[type=date] { width: auto; padding: 6px 8px; font-size: 13px; }
+.jday { margin: 22px 0 8px; font: 600 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.jday:first-child { margin-top: 12px; }
+.jentry { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 14px 16px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 14px; background: var(--card-2); }
+.jtxt { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14.5px; line-height: 1.6; }
+.jmeta { display: flex; align-items: flex-start; gap: 4px; }
+.jbtn { width: 28px; height: 28px; border: 0; border-radius: 8px; background: none; color: var(--dim); font-size: 13px; cursor: pointer; opacity: .55; }
+.jentry:hover .jbtn, .jbtn:focus-visible { opacity: 1; }
+.jbtn:hover { color: var(--text); background: var(--card-3); }
+.jentry.editing { grid-template-columns: 1fr; }
+.jentry.editing textarea { width: 100%; resize: vertical; line-height: 1.6; }
+.jact { display: flex; gap: 8px; }
+@media (max-width: 600px) { .jhint { display: none; } .jnew-row .grow { display: none; } .jnew-row .btn { margin-left: auto; } }
+
+/* ===================================================== */
+/* Plato del día (Inicio)                                 */
+/* ===================================================== */
+.plato-grid { display: grid; grid-template-columns: 1fr 1fr 1.1fr; gap: 14px; }
+.plato-item { display: grid; gap: 8px; align-content: start; }
+.plato-main { display: grid; gap: 4px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--card-2); color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: border-color .15s, background .15s; }
+.plato-main:hover { border-color: var(--accent); background: var(--card-3); }
+.plato-main b { font: 700 16px var(--display); }
+.plato-main .mk { font: 500 12px var(--mono); color: var(--accent); }
+.plato-item .btn { justify-self: start; }
+.plato-total { display: grid; gap: 6px; align-content: center; padding: 14px 16px; border: 1px dashed var(--line-2); border-radius: 14px; }
+.plato-total b { font: 700 19px/1.25 var(--display); }
+@media (max-width: 900px) { .plato-grid { grid-template-columns: 1fr; } }

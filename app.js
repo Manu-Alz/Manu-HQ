@@ -47,6 +47,7 @@ const ICONS = {
   judo: "M3 9h18v4H3zM10 13l-2.5 8M14 13l2.5 8M12 3v6",
   fisico: "M3 3v18h18M7 15l4-4 3 3 5-6",
   surf: "M2 8c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 13c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 18c2-2 4-2 6 0s4 2 6 0 4-2 6 0",
+  diario: "M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z",
   calendario: "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
   comida: "M7 2v7a2 2 0 0 0 4 0V2M9 9v13M17 22V2c-2.5 1.5-4 4-4 8v4h4",
   habitos: "M22 11.1V12a10 10 0 1 1-5.9-9.1M22 4L12 14l-3-3",
@@ -61,7 +62,7 @@ const ICONS = {
 const NAV = [
   { group: null, items: [["inicio", "Inicio"]] },
   { group: "Cuerpo", items: [["rutina", "Rutina / Gym"], ["comida", "Comida"], ["judo", "Judo"], ["fisico", "Cambio físico"], ["surf", "Surf"]] },
-  { group: "Vida", items: [["calendario", "Calendario"], ["habitos", "Hábitos"], ["estudio", "Estudio"], ["idiomas", "Idiomas"], ["compras", "Compras"], ["watch", "Watch list"]] },
+  { group: "Vida", items: [["calendario", "Calendario"], ["habitos", "Hábitos"], ["diario", "Diario"], ["estudio", "Estudio"], ["idiomas", "Idiomas"], ["compras", "Compras"], ["watch", "Watch list"]] },
   { group: "Trabajo", items: [["proyectos", "Proyectos"], ["contenido", "Contenido"], ["ideas", "Ideas"]] },
 ];
 
@@ -94,6 +95,7 @@ const DEFAULT_STATE = {
   watch: [],
   music: [{ id: "m-default", uri: PLAYLIST, kind: "playlist", name: "Lost Men", img: "", folder: "", date: "" }],
   sc: [],                      // lista de SoundCloud: { id, url, name, img, date }
+  journal: [],                 // diario: { id, text, date, time? }
 };
 
 /* ---------- Niveles de idiomas ---------- */
@@ -114,7 +116,7 @@ function normalize(data) {
   const s = { ...structuredClone(DEFAULT_STATE), ...data };
   s.logs = { ...DEFAULT_STATE.logs, ...s.logs };
   for (const k of ["waza", "notes", "habits"]) s[k] = s[k] || {};
-  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "langs", "buy", "watch", "music", "sc"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
+  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "langs", "buy", "watch", "music", "sc", "journal"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
   // Las notas libres viejas de Uruguay pasan a la lista de notas (una sola vez)
   if (s.uyNotes) { (s.notes.uruguay = s.notes.uruguay || []).unshift({ id: uid(), text: s.uyNotes, date: today() }); }
   // "Estilo de vida" se reemplazó por Hábitos: sus lugares y notas pasan a Ideas, una sola vez.
@@ -645,6 +647,60 @@ function vocabHTML(L, list) {
 }
 const langById = (id) => S.langs.find((l) => l.id === id);
 
+/* ---------- Diario ---------- */
+let jEdit = null, jQ = "";     // entrada que estoy editando y búsqueda
+const J_DRAFT = "manuhq-jdraft";   // lo que escribiste y todavía no guardaste (de este dispositivo)
+function journalList(q) {
+  const terms = plain(q).split(/\s+/).filter(Boolean);
+  const all = [...S.journal].sort((a, b) => (b.date + (b.time || "")).localeCompare(a.date + (a.time || "")));
+  const list = all.filter((e) => terms.every((t) => plain(e.text).includes(t)));
+  if (!list.length) return `<p class="empty">${all.length ? "No hay entradas con eso." : "Todavía no escribiste nada. Lo primero que escribas aparece acá."}</p>`;
+  let day = "", out = "";
+  for (const e of list) {
+    if (e.date !== day) { day = e.date; out += `<h3 class="jday">${esc(dateLong(day))}${day === today() ? " · hoy" : ""}</h3>`; }
+    out += jEdit === e.id
+      ? `<div class="jentry editing"><textarea id="j-edit-text" rows="6" aria-label="Editar entrada">${esc(e.text)}</textarea>
+          <div class="jact"><button class="btn btn-primary btn-sm" type="button" data-act="j-save" data-id="${e.id}">Guardar</button><button class="btn btn-sm btn-ghost" type="button" data-act="j-cancel">Cancelar</button></div></div>`
+      : `<article class="jentry"><div class="jtxt">${linkify(e.text)}</div>
+          <div class="jmeta">${e.time ? `<span class="mono small muted">${esc(e.time)}</span>` : ""}<button class="jbtn" type="button" data-act="j-edit" data-id="${e.id}" title="Editar" aria-label="Editar">✎</button><button class="jbtn" type="button" data-act="del-journal" data-id="${e.id}" title="Borrar" aria-label="Borrar">✕</button></div></article>`;
+  }
+  return out;
+}
+
+/* ---------- Plato del día + batido (de "Opciones para elegir" de Plan-73) ---------- */
+const numsOf = (s) => { const m = String(s).match(/(\d[\d.]*)\s*(?:kcal)?\s*·\s*(\d+)\s*g/i); return m ? { kcal: +m[1].replace(/\./g, ""), g: +m[2] } : null; };
+function getPick() { let st = null; try { st = JSON.parse(lsGet("manuhq-plato")); } catch (e) { /* nada */ } return st && st.date === today() ? st : { date: today(), p: 0, b: 0 }; }
+function platoCard() {
+  const list = recipes();
+  const plates = list.filter((r) => /almuerzos/i.test(r.group));
+  const shakes = list.filter((r) => /batidos/i.test(r.group) && !/\(para la noche\)|\(antes de entrenar\)|bomba/i.test(r.name));   // batidos de todos los días
+  if (!plates.length || !shakes.length) return "";
+  const st = getPick(), n = Math.floor(new Date(today() + "T12:00:00").getTime() / 864e5);
+  const plate = plates[(n + st.p) % plates.length], shake = shakes[(n + 5 + st.b) % shakes.length];
+  const a = numsOf(plate.nums), b = numsOf(shake.nums), tot = a && b ? { kcal: a.kcal + b.kcal, g: a.g + b.g } : null;
+  const daily = PLAN?.nutrition?.daily || [];
+  const goal = (re) => { const r = daily.find((x) => re.test((x[0] || []).join(" "))); const m = r && (r[1] || []).join(" ").match(/(\d[\d.]*)/); return m ? +m[1].replace(/\./g, "") : null; };
+  const gK = goal(/calor/i), gP = goal(/prote/i);
+  const goalTxt = daily.length ? `${(daily.find((x) => /calor/i.test((x[0] || []).join(" "))) || [[], []])[1].join(" ")} · ${(daily.find((x) => /prote/i.test((x[0] || []).join(" "))) || [[], []])[1].join(" ")}` : "";
+  const item = (label, r, which) => `<div class="plato-item"><span class="label-sm">${label}</span>
+    <button class="plato-main" type="button" data-act="recipe-opt" data-gi="${r.gi}" data-ri="${r.ri}" title="Ver la receta">
+      <b>${esc(r.name.replace(/\s*\(.*?\)\s*/g, " ").trim())}</b>
+      <span class="mk">${esc(fmtNums(r.nums).replace(" de proteína", ""))}</span>
+      <span class="small muted">${esc(recipeParts(r).items.slice(0, 3).join(" · ") || r.text)}</span>
+    </button>
+    <button class="btn btn-sm btn-ghost" type="button" data-act="plato-next" data-w="${which}">↻ Otro ${label.toLowerCase()}</button></div>`;
+  return `<div class="bento"><div class="card c-12 plato">
+    <div class="card-head"><div><span class="label-sm">Plato del día</span><h2 style="font-size:20px;margin-top:6px">Fácil de hacer, y suma macros</h2></div><a href="#comida" class="sub">Toda la comida →</a></div>
+    <div class="plato-grid">
+      ${item("Plato", plate, "p")}
+      ${item("Batido", shake, "b")}
+      ${tot ? `<div class="plato-total"><span class="label-sm">Entre los dos</span><b>${tot.kcal} kcal · ${tot.g} g de proteína</b>
+        <span class="small muted">${gK && gP ? `Cubre ${Math.round((tot.kcal / gK) * 100)}% de las calorías y ${Math.round((tot.g / gP) * 100)}% de la proteína del día${goalTxt ? ` (meta: ${esc(goalTxt)})` : ""}.` : "Sumá lo que falte con el resto de las comidas."}</span></div>` : ""}
+    </div>
+    <p class="tip-line" style="margin:12px 0 0">Tocá el plato o el batido para ver qué lleva. Mañana cambian solos.</p>
+  </div></div>`;
+}
+
 const VIEWS = {
   inicio() {
     const d = ROUTINE[new Date().getDay()];
@@ -693,6 +749,7 @@ const VIEWS = {
       </div>
     </div>
     <div class="bento"><div class="c-12">${gymCal({ mark: false, nav: false, go: true, head: false })}</div></div>
+    ${platoCard()}
     <div class="bento">
       ${tasksCard(null, "Tareas", "c-5")}
       <div class="card c-4">
@@ -992,6 +1049,32 @@ const VIEWS = {
         ${undated.length ? `<div class="card"><div class="card-head"><h2>Sin fecha</h2><span class="sub">${undated.length}</span></div>
           <p class="small muted" style="margin:-6px 0 10px">Elegí una fecha y la tarea aparece en el calendario.</p>
           <ul class="list">${undated.slice(0, 8).map((x) => `<li><span class="grow">${esc(x.text)}</span><input type="date" data-act="task-due" data-id="${x.id}" aria-label="Ponerle fecha a: ${esc(x.text)}" style="flex:0 0 140px" /></li>`).join("")}</ul></div>` : ""}
+      </div>
+    </div>`;
+  },
+
+  diario() {
+    const all = S.journal, nDays = new Set(all.map((e) => e.date)).size;
+    return `
+    ${head("Diario", "Todo lo que pensás, en un solo lugar. Escribí lo que quieras: se guarda solo.")}
+    <div class="bento">
+      <div class="card c-12 jnew">
+        <form data-form="journal">
+          <textarea name="text" rows="5" placeholder="¿Qué tenés en la cabeza hoy? Escribí lo que quieras…" aria-label="Nueva entrada" required>${esc(lsGet(J_DRAFT) || "")}</textarea>
+          <div class="jnew-row">
+            <label class="small muted">Fecha <input type="date" name="date" value="${today()}" max="${today()}" /></label>
+            <span class="grow"></span>
+            <span class="small muted jhint">Ctrl + Enter para guardar</span>
+            <button class="btn btn-primary">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="bento">
+      <div class="card c-12">
+        <div class="card-head"><h2>Mis entradas</h2><span class="sub">${all.length} ${all.length === 1 ? "entrada" : "entradas"} · ${nDays} ${nDays === 1 ? "día" : "días"}</span></div>
+        ${all.length ? `<input id="j-q" type="search" placeholder="Buscar en mi diario…" value="${esc(jQ)}" aria-label="Buscar en mi diario" autocomplete="off" style="margin-bottom:6px" />` : ""}
+        <div id="j-list">${journalList(jQ)}</div>
       </div>
     </div>`;
   },
@@ -1341,6 +1424,7 @@ function render() {
 window.addEventListener("hashchange", () => {
   if (route() === "rutina" && !render.keepDay) { selDay = new Date().getDay(); weekOff = 0; }
   if (route() === "calendario") { calMonth = null; calSel = null; }
+  if (route() === "diario") { jEdit = null; jQ = ""; }
   render.keepDay = false;
   render(); window.scrollTo(0, 0); $("#sidebar").classList.remove("open");
   const v = $("#view"); v.style.animation = "none"; void v.offsetWidth; v.style.animation = "";   // transición suave entre secciones
@@ -1368,6 +1452,11 @@ document.addEventListener("submit", (e) => {
   const kind = f.dataset.form;
   switch (kind) {
     case "task": S.tasks.unshift({ id: uid(), text: v.text, area: f.dataset.area || v.area, done: false, ...(v.due ? { due: v.due } : {}) }); break;
+    case "journal": {
+      const text = (v.text || "").trim(); if (!text) return;
+      S.journal.unshift({ id: uid(), text, date: v.date || today(), ...((v.date || today()) === today() ? { time: new Date().toTimeString().slice(0, 5) } : {}) });
+      lsDel(J_DRAFT); toast("Entrada guardada ✓"); break;
+    }
     case "cal-task": S.tasks.unshift({ id: uid(), text: v.text.trim(), area: "general", done: false, due: f.dataset.date }); break;
     case "check": S[f.dataset.key].push({ id: uid(), text: v.text, done: false }); break;
     case "weight": S.weights.push({ id: uid(), date: v.date || today(), kg: +v.kg, note: v.note }); break;
@@ -1406,6 +1495,16 @@ function act(el) {
       else { S.logs.gym.push({ id: uid(), date: today(), session: sessionText(ROUTINE[new Date().getDay()]) }); toast("Día marcado ✓"); }
       break;
     case "sel-day": selDay = +el.dataset.day; render(); return;
+    case "recipe-opt": {   // receta de una opción (plato o batido del día)
+      const r = recipes().find((x) => x.gi === +el.dataset.gi && x.ri === +el.dataset.ri);
+      if (r) openPop(r.name, () => recipeHTML({ nums: r.nums, slot: r.group, rec: r, text: r.text }));
+      return;
+    }
+    case "plato-next": { const st = getPick(); st[el.dataset.w] += 1; lsSet("manuhq-plato", JSON.stringify(st)); render(); return; }
+    case "j-edit": jEdit = id; render(); setTimeout(() => $("#j-edit-text")?.focus(), 0); return;
+    case "j-cancel": jEdit = null; render(); return;
+    case "j-save": { const t = ($("#j-edit-text")?.value || "").trim(); if (!t) return; const e = byId(S.journal); if (e) { e.text = t; e.edited = today(); } jEdit = null; break; }
+    case "del-journal": if (!confirm("¿Borrar esta entrada del diario?")) return; S.journal = drop(S.journal); break;
     case "plan-warn": openPop("Plan-73 cambió", planWarnHTML); return;
     case "week-nav": { const dir = +el.dataset.dir; weekOff = dir === 0 ? 0 : Math.min(0, weekOff + dir); render(); return; }
     case "gym-day": {     // marcar o desmarcar un entreno de hoy o de un día que ya pasó
@@ -1492,12 +1591,19 @@ document.addEventListener("change", (e) => {
   if (wf && wf !== "q") { wazaF[wf] = e.target.value; refreshWaza(); }
 });
 document.addEventListener("input", (e) => {
+  if (e.target.id === "j-q") { jQ = e.target.value; $("#j-list").innerHTML = journalList(jQ); return; }
+  if (e.target.name === "text" && e.target.closest("form[data-form=journal]")) { if (e.target.value) lsSet(J_DRAFT, e.target.value); else lsDel(J_DRAFT); return; }   // borrador
   if (e.target.dataset?.wf === "q") { wazaF.q = e.target.value; refreshWaza(); return; }
   if (e.target.id === "vocab-q") {
     vocabQ = e.target.value;
     const L = langById(selLang) || S.langs[0]; const q = vocabQ.trim().toLowerCase();
     $("#vocab-list").innerHTML = vocabHTML(L, L.vocab.filter((v) => !q || (v.w + " " + v.m).toLowerCase().includes(q)));
   }
+});
+
+/* Diario: Ctrl + Enter guarda */
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && e.target.matches?.("form[data-form=journal] textarea")) { e.preventDefault(); e.target.form.requestSubmit(); }
 });
 
 /* Ventana flotante: ✕, clic en lo opaco y Esc la cierran */
