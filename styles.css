@@ -968,3 +968,22 @@ details.opt .table-wrap { padding-bottom: 8px; }
 .plato-total { display: grid; gap: 6px; align-content: center; padding: 14px 16px; border: 1px dashed var(--line-2); border-radius: 14px; }
 .plato-total b { font: 700 19px/1.25 var(--display); }
 @media (max-width: 900px) { .plato-grid { grid-template-columns: 1fr; } }
+
+/* ===================================================== */
+/* Pinterest                                              */
+/* ===================================================== */
+.pin-form { display: grid; gap: 10px; }
+.pin-form textarea { resize: vertical; min-height: 56px; }
+.pin-form .row { display: flex; gap: 8px; flex-wrap: wrap; }
+.pin-form .row input { flex: 1 1 220px; min-width: 0; }
+.pin-h { margin: 18px 0 12px; font-size: 18px; }
+.pin-h .sub { margin-left: 8px; font: 400 12px var(--mono); color: var(--muted); }
+.pin-boards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 14px; align-items: start; }
+.pin-grid { column-width: 250px; column-gap: 14px; }
+.pinw { position: relative; display: inline-block; width: 100%; margin-bottom: 14px; break-inside: avoid; }
+.pin-boards .pinw { margin-bottom: 0; }
+.pinw a[data-pin-do] { color: var(--accent); font-size: 13px; }
+.pin-x { position: absolute; top: 8px; left: 8px; z-index: 5; width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 50%; background: rgba(0,0,0,.7); color: #fff; font-size: 13px; cursor: pointer; opacity: 0; transition: opacity .15s; }
+.pinw:hover .pin-x, .pin-x:focus-visible { opacity: 1; }
+@media (hover: none) { .pin-x { opacity: 1; } }
+.pin-tag { display: block; margin-top: 6px; font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }

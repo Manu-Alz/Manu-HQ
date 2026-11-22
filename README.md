@@ -16,6 +16,7 @@ Mi hub personal: rutina y comida de Plan-73, judo, cambio físico, calendario, h
 - **Comida** (debajo de Gym): la cocina de hoy según Plan-73. Tocás cualquier comida y se abre la receta (qué lleva, con cantidades). Abajo están todas las opciones: batidos, desayunos, almuerzos y cenas, meriendas.
 - **Hábitos**: check-in de cada día con los números diarios de Plan-73 (calorías, proteína, creatina, agua, sueño…) más si entrené. Grilla de la semana y rachas.
 - **Diario** (en Vida): un lugar para escribir lo que pienso, sin estructura. Entradas por día, buscador, se pueden editar, y lo que escribo y no guardo queda como borrador.
+- **Pinterest** (en Trabajo): pego links de pins, de tableros o de mi perfil y los veo todos juntos, con etiquetas para filtrar. Se muestran con los widgets oficiales de Pinterest, porque Pinterest no deja leer las imágenes por link; el script de Pinterest se carga solo en esa sección.
 - **Surf**, **Estudio**, **Idiomas**, **Proyectos**, **Contenido**, **Ideas**.
 - Cada sección tiene sus propias notas. La barra de arriba guarda ideas desde cualquier página.
 - **Música**: botón arriba, junto al buscador de ideas. Abre un menú flotante con el reproductor de Spotify y mi biblioteca: pego links de playlists, álbumes, artistas o canciones, los ordeno en carpetas y los busco. Al cerrar el menú sigue sonando, con play/pausa y progreso en la barra. Spotify no deja leer mis carpetas desde una página, por eso la biblioteca es propia (se sincroniza como el resto).

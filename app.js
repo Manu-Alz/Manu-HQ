@@ -47,6 +47,7 @@ const ICONS = {
   judo: "M3 9h18v4H3zM10 13l-2.5 8M14 13l2.5 8M12 3v6",
   fisico: "M3 3v18h18M7 15l4-4 3 3 5-6",
   surf: "M2 8c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 13c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 18c2-2 4-2 6 0s4 2 6 0 4-2 6 0",
+  pinterest: "M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zM12 11.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z",
   diario: "M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z",
   calendario: "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
   comida: "M7 2v7a2 2 0 0 0 4 0V2M9 9v13M17 22V2c-2.5 1.5-4 4-4 8v4h4",
@@ -63,7 +64,7 @@ const NAV = [
   { group: null, items: [["inicio", "Inicio"]] },
   { group: "Cuerpo", items: [["rutina", "Rutina / Gym"], ["comida", "Comida"], ["judo", "Judo"], ["fisico", "Cambio físico"], ["surf", "Surf"]] },
   { group: "Vida", items: [["calendario", "Calendario"], ["habitos", "Hábitos"], ["diario", "Diario"], ["estudio", "Estudio"], ["idiomas", "Idiomas"], ["compras", "Compras"], ["watch", "Watch list"]] },
-  { group: "Trabajo", items: [["proyectos", "Proyectos"], ["contenido", "Contenido"], ["ideas", "Ideas"]] },
+  { group: "Trabajo", items: [["proyectos", "Proyectos"], ["contenido", "Contenido"], ["ideas", "Ideas"], ["pinterest", "Pinterest"]] },
 ];
 
 /* ---------- Estado ---------- */
@@ -96,6 +97,7 @@ const DEFAULT_STATE = {
   music: [{ id: "m-default", uri: PLAYLIST, kind: "playlist", name: "Lost Men", img: "", folder: "", date: "" }],
   sc: [],                      // lista de SoundCloud: { id, url, name, img, date }
   journal: [],                 // diario: { id, text, date, time? }
+  pins: [],                    // Pinterest: { id, url, kind: "pin" | "board" | "user", tag, date }
 };
 
 /* ---------- Niveles de idiomas ---------- */
@@ -116,7 +118,7 @@ function normalize(data) {
   const s = { ...structuredClone(DEFAULT_STATE), ...data };
   s.logs = { ...DEFAULT_STATE.logs, ...s.logs };
   for (const k of ["waza", "notes", "habits"]) s[k] = s[k] || {};
-  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "langs", "buy", "watch", "music", "sc", "journal"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
+  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "langs", "buy", "watch", "music", "sc", "journal", "pins"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
   // Las notas libres viejas de Uruguay pasan a la lista de notas (una sola vez)
   if (s.uyNotes) { (s.notes.uruguay = s.notes.uruguay || []).unshift({ id: uid(), text: s.uyNotes, date: today() }); }
   // "Estilo de vida" se reemplazó por Hábitos: sus lugares y notas pasan a Ideas, una sola vez.
@@ -701,6 +703,44 @@ function platoCard() {
   </div></div>`;
 }
 
+/* ---------- Pinterest: pins, tableros y perfiles con los widgets oficiales ---------- */
+/* Pinterest no deja leer la imagen de un pin con solo el link (bloquea el pedido desde otras páginas),
+   así que cada pin se muestra con su widget oficial. El script de Pinterest se carga recién en esta sección. */
+let pinTag = "";    // etiqueta elegida para filtrar
+const PIN_RE = /https?:\/\/(?:[\w-]+\.)?pinterest\.[a-z.]+\/[^\s"'<>]+/gi;
+const PIN_RESERVED = new Set(["pin", "search", "ideas", "today", "business", "settings", "explore", "topics", "videos", "about", "help", "login", "logout", "news_hub", "shop", "create", "feed", "notifications", "_"]);
+function pinParse(txt) {
+  const items = [], seen = new Set();
+  for (const m of String(txt).matchAll(PIN_RE)) {
+    let u; try { u = new URL(m[0]); } catch (e) { continue; }
+    const seg = u.pathname.split("/").filter(Boolean);
+    if (!seg.length) continue;
+    let it = null;
+    if (seg[0] === "pin" && /^\d+$/.test(seg[1] || "")) it = { kind: "pin", url: `https://www.pinterest.com/pin/${seg[1]}/` };
+    else if (PIN_RESERVED.has(seg[0].toLowerCase())) continue;
+    else if (seg.length === 1) it = { kind: "user", url: `https://www.pinterest.com/${seg[0]}/` };
+    else it = { kind: "board", url: `https://www.pinterest.com/${seg[0]}/${seg[1]}/` };
+    if (!seen.has(it.url)) { seen.add(it.url); items.push(it); }
+  }
+  return { items, short: (String(txt).match(/pin\.it\/\S+/gi) || []).length };
+}
+let pinitP = null;
+function pinit() {
+  if (window.PinUtils?.build) return Promise.resolve(false);
+  return pinitP || (pinitP = new Promise((res, rej) => {
+    const s = document.createElement("script"); s.async = true; s.src = "https://assets.pinterest.com/js/pinit.js";
+    s.onload = () => { let n = 0; const t = setInterval(() => { if (window.PinUtils?.build) { clearInterval(t); res(true); } else if (++n > 50) { clearInterval(t); pinitP = null; rej(new Error("pinit")); } }, 150); };
+    s.onerror = () => { pinitP = null; rej(new Error("pinit")); };
+    document.head.appendChild(s);
+  }));
+}
+function buildPins() {   // arma los widgets de los links que hay en pantalla
+  const box = $("#pins-wrap");
+  if (!box || !box.querySelector("a[data-pin-do]")) return;
+  // la primera vez, el script de Pinterest arma solo lo que hay en pantalla; las siguientes veces hay que pedírselo
+  pinit().then((fresh) => { if (!fresh && $("#pins-wrap") === box && box.querySelector("a[data-pin-do]")) window.PinUtils.build(box); }).catch(() => toast("No pude cargar Pinterest (¿un bloqueador?). Los links igual abren."));
+}
+
 const VIEWS = {
   inicio() {
     const d = ROUTINE[new Date().getDay()];
@@ -1079,6 +1119,41 @@ const VIEWS = {
     </div>`;
   },
 
+  pinterest() {
+    const tags = [...new Set(S.pins.map((p) => p.tag).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
+    if (pinTag && !tags.includes(pinTag)) pinTag = "";
+    const shown = S.pins.filter((p) => !pinTag || p.tag === pinTag);
+    const wide = shown.filter((p) => p.kind !== "pin"), pins = shown.filter((p) => p.kind === "pin");
+    const view = $("#view"), cs = getComputedStyle(view), inner = view.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const bw = Math.max(200, Math.min(440, Math.floor(inner) - 4));   // el tablero ocupa el ancho disponible (sin pasarse en el celular)
+    const card = (p) => {
+      const a = p.kind === "pin"
+        ? `<a data-pin-do="embedPin" data-pin-width="small" href="${esc(p.url)}">Ver este pin en Pinterest ↗</a>`
+        : `<a data-pin-do="${p.kind === "user" ? "embedUser" : "embedBoard"}" data-pin-board-width="${bw}" data-pin-scale-height="260" data-pin-scale-width="80" href="${esc(p.url)}">${p.kind === "user" ? "Ver el perfil" : "Ver el tablero"} en Pinterest ↗</a>`;
+      return `<div class="pinw">${a}<button class="pin-x" type="button" data-act="del-pin" data-id="${p.id}" title="Quitar de acá" aria-label="Quitar">✕</button>${p.tag ? `<span class="pin-tag">${esc(p.tag)}</span>` : ""}</div>`;
+    };
+    const chip = (id, label, n) => `<button class="chip ${pinTag === id ? "on" : ""}" type="button" data-act="pin-tag" data-t="${esc(id)}">${esc(label)}<span class="muted small mono">${n}</span></button>`;
+    return `
+    ${head("Pinterest", "Tus pins, tableros y perfil, todos juntos. Pegá el link y se ven acá.")}
+    <div class="bento"><div class="card c-12">
+      <form class="pin-form" data-form="pin" autocomplete="off">
+        <textarea name="links" rows="2" placeholder="Pegá uno o varios links de Pinterest: un pin, un tablero o tu perfil…" required></textarea>
+        <div class="row">
+          <input name="tag" list="pin-tags" placeholder="Etiqueta (opcional): Fitness, Eventos…" maxlength="30" />
+          <datalist id="pin-tags">${tags.map((t) => `<option value="${esc(t)}"></option>`).join("")}</datalist>
+          <button class="btn btn-primary">Agregar</button>
+        </div>
+        <p class="small muted" style="margin:0">En Pinterest: abrí el pin, tocá ⋯ y elegí “Copiar enlace”. Si el link empieza con <b>pin.it</b> no lo puedo leer: abrí el pin en la computadora y copiá la dirección de la barra. Para ver todo lo tuyo de una, pegá el link de tu perfil.</p>
+      </form>
+    </div></div>
+    ${S.pins.length ? `<div class="filters" style="margin:4px 0 16px">${chip("", "Todo", S.pins.length)}${tags.map((t) => chip(t, t, S.pins.filter((p) => p.tag === t).length)).join("")}</div>` : ""}
+    <div id="pins-wrap">
+      ${wide.length ? `<h2 class="pin-h">Tableros y perfil</h2><div class="pin-boards">${wide.map(card).join("")}</div>` : ""}
+      ${pins.length ? `<h2 class="pin-h">Pins <span class="sub">${pins.length}</span></h2><div class="pin-grid">${pins.map(card).join("")}</div>` : ""}
+      ${S.pins.length ? "" : `<div class="card"><p class="empty">Todavía no agregaste nada. Pegá arriba el link de un pin, de un tablero o de tu perfil de Pinterest.</p></div>`}
+    </div>`;
+  },
+
   habitos() {
     const hd = habitDay || today(), isNow = hd === today(), todayD = today(), hs = habitList();
     const dowOf = (d) => new Date(d + "T12:00:00").getDay();
@@ -1420,6 +1495,7 @@ function render() {
   $("#top-sync").innerHTML = syncBadge();
   document.title = route() === "inicio" ? "Manu HQ" : `${routeLabel(route())} · Manu HQ`;
   refreshPop();
+  if (route() === "pinterest") buildPins();
 }
 window.addEventListener("hashchange", () => {
   if (route() === "rutina" && !render.keepDay) { selDay = new Date().getDay(); weekOff = 0; }
@@ -1452,6 +1528,14 @@ document.addEventListener("submit", (e) => {
   const kind = f.dataset.form;
   switch (kind) {
     case "task": S.tasks.unshift({ id: uid(), text: v.text, area: f.dataset.area || v.area, done: false, ...(v.due ? { due: v.due } : {}) }); break;
+    case "pin": {
+      const { items, short } = pinParse(v.links), have = new Set(S.pins.map((p) => p.url)), fresh = items.filter((i) => !have.has(i.url));
+      if (!items.length) { toast(short ? "Los links pin.it no se pueden leer: abrí el pin en la compu y copiá la dirección" : "No encontré links de Pinterest"); return; }
+      const tag = (v.tag || "").trim().slice(0, 30);
+      S.pins.unshift(...fresh.map((i) => ({ id: uid(), url: i.url, kind: i.kind, tag, date: today() })));
+      toast(fresh.length ? `${fresh.length} agregado${fresh.length === 1 ? "" : "s"}${items.length > fresh.length ? ` · ${items.length - fresh.length} ya estaba${items.length - fresh.length === 1 ? "" : "n"}` : ""}` : "Ya estaban todos");
+      break;
+    }
     case "journal": {
       const text = (v.text || "").trim(); if (!text) return;
       S.journal.unshift({ id: uid(), text, date: v.date || today(), ...((v.date || today()) === today() ? { time: new Date().toTimeString().slice(0, 5) } : {}) });
@@ -1505,6 +1589,8 @@ function act(el) {
     case "j-cancel": jEdit = null; render(); return;
     case "j-save": { const t = ($("#j-edit-text")?.value || "").trim(); if (!t) return; const e = byId(S.journal); if (e) { e.text = t; e.edited = today(); } jEdit = null; break; }
     case "del-journal": if (!confirm("¿Borrar esta entrada del diario?")) return; S.journal = drop(S.journal); break;
+    case "del-pin": S.pins = drop(S.pins); break;
+    case "pin-tag": pinTag = el.dataset.t; render(); return;
     case "plan-warn": openPop("Plan-73 cambió", planWarnHTML); return;
     case "week-nav": { const dir = +el.dataset.dir; weekOff = dir === 0 ? 0 : Math.min(0, weekOff + dir); render(); return; }
     case "gym-day": {     // marcar o desmarcar un entreno de hoy o de un día que ya pasó
