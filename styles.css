@@ -1234,3 +1234,4 @@ form.inline input[type=date] { flex: 0 1 150px; }
 .getout { margin: 44px 0 8px; text-align: center; display: grid; gap: 6px; }
 .getout b { font: 800 clamp(26px, 4vw, 40px)/1.1 var(--display); letter-spacing: -.02em; }
 .getout span { color: var(--dim); font-size: 13.5px; }
+.getout em { margin-top: 10px; color: var(--muted); font-size: 14.5px; font-style: italic; }
