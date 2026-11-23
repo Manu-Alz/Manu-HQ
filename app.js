@@ -54,6 +54,7 @@ const ICONS = {
   judo: "M3 9h18v4H3zM10 13l-2.5 8M14 13l2.5 8M12 3v6",
   fisico: "M3 3v18h18M7 15l4-4 3 3 5-6",
   surf: "M2 8c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 13c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 18c2-2 4-2 6 0s4 2 6 0 4-2 6 0",
+  lectura: "M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2zM22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z",
   media: "M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM21 15l-5-5L5 21",
   pinterest: "M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zM12 11.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z",
   diario: "M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z",
@@ -71,7 +72,7 @@ const ICONS = {
 const NAV = [
   { group: null, items: [["inicio", "Inicio"]] },
   { group: "Cuerpo", items: [["rutina", "Rutina / Gym"], ["comida", "Comida"], ["judo", "Judo"], ["fisico", "Cambio físico"], ["surf", "Surf"]] },
-  { group: "Vida", items: [["calendario", "Calendario"], ["habitos", "Hábitos"], ["diario", "Diario"], ["estudio", "Estudio"], ["idiomas", "Idiomas"], ["compras", "Compras"], ["watch", "Watch list"]] },
+  { group: "Vida", items: [["calendario", "Calendario"], ["habitos", "Hábitos"], ["diario", "Diario"], ["estudio", "Estudio"], ["idiomas", "Idiomas"], ["lectura", "Lectura"], ["compras", "Compras"], ["watch", "Watch list"]] },
   { group: "Trabajo", items: [["proyectos", "Proyectos"], ["contenido", "Contenido"], ["ideas", "Ideas"], ["pinterest", "Pinterest"], ["media", "Media"]] },
 ];
 
@@ -108,6 +109,9 @@ const DEFAULT_STATE = {
   pins: [],                    // Pinterest: { id, url, kind: "pin" | "board" | "user", tag, date }
   media: [],                   // fotos: solo la ficha { id, tag, date, w, h, kb }; la foto está en IndexedDB y en un gist aparte
   mediaGist: "",               // id del gist donde se guardan las fotos
+  books: [],                   // lectura: { id, title, author, pages, page, status: "want" | "reading" | "done", rating, notes, cover, added, started, finished }
+  readDays: [],                // días en que leí (para la racha)
+  readGoal: 12,                // meta de libros del año
 };
 
 /* ---------- Niveles de idiomas ---------- */
@@ -128,7 +132,7 @@ function normalize(data) {
   const s = { ...structuredClone(DEFAULT_STATE), ...data };
   s.logs = { ...DEFAULT_STATE.logs, ...s.logs };
   for (const k of ["waza", "notes", "habits"]) s[k] = s[k] || {};
-  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "langs", "buy", "watch", "music", "sc", "journal", "pins", "media"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
+  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "langs", "buy", "watch", "music", "sc", "journal", "pins", "media", "books", "readDays"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
   // Las notas libres viejas de Uruguay pasan a la lista de notas (una sola vez)
   if (s.uyNotes) { (s.notes.uruguay = s.notes.uruguay || []).unshift({ id: uid(), text: s.uyNotes, date: today() }); }
   // "Estilo de vida" se reemplazó por Hábitos: sus lugares y notas pasan a Ideas, una sola vez.
@@ -908,6 +912,71 @@ function photoHTML(id) {
     </div>`;
 }
 
+/* ---------- Lectura: libros, progreso, racha y notas ---------- */
+/* Los libros se buscan en Open Library (gratis, sin cuenta) para completar autor, páginas y portada solos. */
+let bookQ = "", bookSug = [], bookBusy = false, bookErr = false, bookSearchT = null, bookSearchN = 0;
+const bookPct = (b) => (b.pages > 0 ? Math.min(100, Math.round(((b.page || 0) / b.pages) * 100)) : 0);
+const bookCover = (src, title, cls = "") => `<span class="bcover ${cls}">${src ? `<img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" />` : ""}<i>${esc((title || "?").slice(0, 1).toUpperCase())}</i></span>`;
+async function bookSearch(q) {
+  const n = ++bookSearchN;
+  bookBusy = true; bookErr = false;
+  try {
+    const r = await fetch("https://openlibrary.org/search.json?limit=6&fields=key,title,author_name,first_publish_year,cover_i,number_of_pages_median&q=" + encodeURIComponent(q));
+    const j = await r.json();
+    if (n !== bookSearchN) return;
+    bookSug = (j.docs || []).map((d) => ({ title: d.title, author: (d.author_name || []).slice(0, 2).join(", "), year: d.first_publish_year || "", pages: d.number_of_pages_median || 0, cover: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-M.jpg` : "" }));
+  } catch (e) { if (n !== bookSearchN) return; bookSug = []; bookErr = true; }
+  bookBusy = false; renderBookSug();
+}
+const bookBtns = (i) => [["want", "Quiero leer"], ["reading", "Leyendo"], ["done", "Leído"]].map(([k, l]) => `<button class="btn btn-sm ${k === "reading" ? "btn-primary" : ""}" type="button" data-act="book-add" data-i="${i}" data-st="${k}">${l}</button>`).join("");
+function bookSugHTML() {
+  const q = bookQ.trim();
+  if (q.length < 3) return "";
+  const rows = bookSug.map((s, i) => `<li class="bsug">${bookCover(s.cover, s.title, "sm")}
+    <span class="bsug-t"><b>${esc(s.title)}</b><span class="muted small">${esc([s.author, s.year, s.pages ? s.pages + " págs" : ""].filter(Boolean).join(" · "))}</span></span>
+    <span class="bsug-b">${bookBtns(i)}</span></li>`).join("");
+  return `<ul class="bsug-list">
+    ${bookBusy ? `<li class="bsug-note">Buscando…</li>` : bookErr ? `<li class="bsug-note">No pude buscar (¿sin conexión?). Igual lo podés agregar a mano.</li>` : ""}
+    ${rows}
+    <li class="bsug manual"><span class="bsug-t"><b>Agregar «${esc(q)}» tal cual</b><span class="muted small">Si no lo ves en la lista</span></span><span class="bsug-b">${bookBtns("m")}</span></li></ul>`;
+}
+function renderBookSug() { const el = $("#book-sug"); if (el) el.innerHTML = bookSugHTML(); }
+function setBookStatus(b, st) {
+  b.status = st;
+  if (st === "reading") { b.started = b.started || today(); b.finished = ""; }
+  if (st === "done") { b.started = b.started || today(); b.finished = b.finished || today(); if (b.pages) b.page = b.pages; }
+  if (st === "want") { b.started = ""; b.finished = ""; }
+}
+function bookReadFields(b) {   // pasa lo que escribiste en el popup al libro (antes de cambiar estado o estrellas)
+  const g = (id) => $("#pop " + id);
+  if (!g("#bk-title")) return;
+  b.title = g("#bk-title").value.trim() || b.title;
+  b.author = g("#bk-author").value.trim();
+  b.pages = Math.max(0, +g("#bk-pages").value || 0);
+  b.page = Math.max(0, Math.min(b.pages || Infinity, +g("#bk-page").value || 0));
+  b.notes = g("#bk-notes").value;
+}
+function bookPopHTML(id) {
+  const b = S.books.find((x) => x.id === id);
+  if (!b) return `<p class="empty">Ese libro ya no está.</p>`;
+  const st = (k, label) => `<button class="chip ${b.status === k ? "on" : ""}" type="button" data-act="book-status" data-id="${id}" data-st="${k}">${label}</button>`;
+  return `<div class="bk-top">${bookCover(b.cover, b.title, "big")}
+      <div class="bk-id"><input id="bk-title" value="${esc(b.title)}" aria-label="Título" /><input id="bk-author" value="${esc(b.author || "")}" placeholder="Autor" aria-label="Autor" /></div></div>
+    <h4>Estado</h4>
+    <div class="filters" style="margin:0">${st("want", "Quiero leer")}${st("reading", "Leyendo")}${st("done", "Leído")}</div>
+    <h4>Progreso</h4>
+    <div class="bk-prog">
+      <label><span class="small muted">Página en la que estás</span><input id="bk-page" type="number" min="0" inputmode="numeric" value="${b.page || 0}" /></label>
+      <label><span class="small muted">Total de páginas</span><input id="bk-pages" type="number" min="0" inputmode="numeric" value="${b.pages || 0}" /></label>
+    </div>
+    ${b.pages ? `<div class="progress" style="margin-top:10px"><div style="width:${bookPct(b)}%"></div></div><p class="small muted" style="margin:6px 0 0">${bookPct(b)}% · te faltan ${Math.max(0, b.pages - (b.page || 0))} páginas</p>` : ""}
+    <h4>Mi opinión</h4>
+    <div class="bk-stars" role="group" aria-label="Puntaje">${[1, 2, 3, 4, 5].map((n) => `<button class="star ${n <= (b.rating || 0) ? "on" : ""}" type="button" data-act="book-rate" data-id="${id}" data-n="${n}" aria-label="${n} de 5" aria-pressed="${n <= (b.rating || 0)}">★</button>`).join("")}</div>
+    <h4>Notas y citas</h4>
+    <textarea id="bk-notes" rows="6" placeholder="Lo que te quedó, frases que te gustaron, ideas para aplicar…" aria-label="Notas y citas">${esc(b.notes || "")}</textarea>
+    <div class="bk-actions"><button class="btn btn-primary" type="button" data-act="book-save" data-id="${id}">Guardar</button><button class="btn btn-ghost" type="button" data-act="book-del" data-id="${id}">Borrar libro</button></div>`;
+}
+
 const VIEWS = {
   inicio() {
     const d = ROUTINE[new Date().getDay()];
@@ -1347,6 +1416,37 @@ const VIEWS = {
     </div></div>
     ${S.media.length ? `<div class="filters" style="margin:4px 0 16px">${chip("", "Todas", S.media.length)}${tags.map((t) => chip(t, t, S.media.filter((m) => m.tag === t).length)).join("")}</div>` : ""}
     ${shown.length ? `<div class="mgrid">${shown.map(tile).join("")}</div>` : `<div class="card"><p class="empty">${S.media.length ? "No hay fotos con esa etiqueta." : "Todavía no hay fotos. Copiá una imagen (una captura, una foto del celular) y pegala acá con Ctrl + V."}</p></div>`}`;
+  },
+
+  lectura() {
+    const yr = String(new Date().getFullYear()), B = S.books;
+    const reading = B.filter((b) => b.status === "reading"), want = B.filter((b) => b.status === "want"), done = B.filter((b) => b.status === "done");
+    const doneYear = done.filter((b) => (b.finished || "").startsWith(yr)), pagesYear = doneYear.reduce((s, b) => s + (b.pages || 0), 0);
+    const goal = S.readGoal || 12, goals = [...new Set([6, 10, 12, 15, 20, 24, 30, 40, 52, goal])].sort((a, b) => a - b);
+    const streak = streakOf(S.readDays), readToday = S.readDays.includes(today());
+    const tile = (b) => `<button class="book" type="button" data-act="book-open" data-id="${b.id}">${bookCover(b.cover, b.title)}
+      <span class="binfo"><b>${esc(b.title)}</b>${b.author ? `<span class="muted small">${esc(b.author)}</span>` : ""}
+      ${b.status === "reading" ? `<span class="bprog"><span class="progress"><div style="width:${bookPct(b)}%"></div></span><span class="small mono muted">${b.pages ? `pág. ${b.page || 0} de ${b.pages} · ${bookPct(b)}%` : "tocá para poner las páginas"}</span></span>` : ""}
+      ${b.status === "done" ? `<span class="bstars" aria-label="${b.rating || 0} de 5">${"★".repeat(b.rating || 0)}<span class="off">${"★".repeat(5 - (b.rating || 0))}</span></span><span class="small muted">${esc(fmtDate(b.finished))}</span>` : ""}
+      ${b.status === "want" && b.pages ? `<span class="small muted">${b.pages} páginas</span>` : ""}</span></button>`;
+    const shelf = (title, list, empty) => `<div class="bento"><div class="card c-12"><div class="card-head"><h2>${title}</h2><span class="sub">${list.length}</span></div>
+      ${list.length ? `<div class="bgrid">${list.map(tile).join("")}</div>` : `<p class="empty">${empty}</p>`}</div></div>`;
+    return `
+    ${head("Lectura", "Lo que estás leyendo, lo que querés leer y lo que ya leíste.", "", "")}
+    <div class="kpis row4" style="margin-bottom:16px">
+      <div class="kpi"><span class="label-sm">Meta ${yr}</span><div class="v">${doneYear.length}<small>de <select class="goal-sel" data-act="read-goal" aria-label="Meta de libros del año">${goals.map((g) => `<option value="${g}" ${g === goal ? "selected" : ""}>${g}</option>`).join("")}</select> libros</small></div><div class="bar"><i style="width:${Math.min(100, (doneYear.length / goal) * 100)}%"></i></div></div>
+      <div class="kpi"><span class="label-sm">Leyendo ahora</span><div class="v">${reading.length}<small>${reading.length === 1 ? "libro" : "libros"}</small></div><div class="d">${want.length} esperando en tu lista</div></div>
+      <div class="kpi"><span class="label-sm">Racha de lectura</span><div class="v">${streak}<small>${streak === 1 ? "día" : "días"}</small></div><div class="d">${readToday ? "hoy ya leíste ✓" : "hoy todavía no"}</div></div>
+      <div class="kpi"><span class="label-sm">Páginas ${yr}</span><div class="v">${pagesYear}<small>págs</small></div><div class="d">de los libros que terminaste</div></div>
+    </div>
+    <div class="bento"><div class="card c-12">
+      <div class="card-head"><h2>Agregar un libro</h2><button class="btn btn-sm ${readToday ? "btn-done" : ""}" type="button" data-act="read-today" title="Marca que hoy leíste, para la racha">${readToday ? "✓ Leí hoy" : "Marcar: leí hoy"}</button></div>
+      <input id="book-q" type="search" value="${esc(bookQ)}" placeholder="Escribí el título o el autor: “El principito”, “Atomic Habits”…" autocomplete="off" aria-label="Buscar un libro" />
+      <div id="book-sug">${bookSugHTML()}</div>
+    </div></div>
+    ${shelf("Leyendo", reading, "No estás leyendo nada ahora. Elegí uno de “Quiero leer” o buscá uno arriba.")}
+    ${shelf("Quiero leer", want, "Tu lista de pendientes está vacía. Buscá un libro arriba y tocá “Quiero leer”.")}
+    ${shelf("Leídos", done, "Todavía no marcaste ninguno como leído.")}`;
   },
 
   habitos() {
@@ -1891,6 +1991,29 @@ function act(el) {
     case "open-sync": $("#sync-btn").click(); return;
     case "del-pin": S.pins = drop(S.pins); break;
     case "pin-tag": pinTag = el.dataset.t; render(); return;
+    case "read-today": S.readDays = S.readDays.includes(today()) ? S.readDays.filter((d) => d !== today()) : [...S.readDays, today()]; break;
+    case "read-goal": S.readGoal = +el.value || 12; break;
+    case "book-open": if (el.dataset.id) openPop("Libro", () => bookPopHTML(el.dataset.id), "wide"); return;
+    case "book-add": {
+      const s = el.dataset.i === "m" ? { title: bookQ.trim(), author: "", pages: 0, cover: "" } : bookSug[+el.dataset.i], st = el.dataset.st;
+      if (!s || !s.title) return;
+      const b = { id: uid(), title: s.title, author: s.author || "", pages: s.pages || 0, page: 0, status: "want", rating: 0, notes: "", cover: s.cover || "", added: today() };
+      setBookStatus(b, st);
+      S.books.unshift(b); bookQ = ""; bookSug = []; bookBusy = false;
+      toast(st === "reading" ? "Listo, ya lo estás leyendo ✓" : st === "done" ? "Agregado a tus leídos ✓" : "Agregado a tu lista ✓");
+      break;
+    }
+    case "book-status": { const b = byId(S.books); if (!b) return; bookReadFields(b); setBookStatus(b, el.dataset.st); break; }
+    case "book-rate": { const b = byId(S.books); if (!b) return; bookReadFields(b); b.rating = b.rating === +el.dataset.n ? 0 : +el.dataset.n; break; }
+    case "book-save": {
+      const b = byId(S.books); if (!b) return;
+      const before = b.page || 0; bookReadFields(b);
+      if (b.page > before && !S.readDays.includes(today())) S.readDays.push(today());   // avanzar de página cuenta como "leí hoy"
+      const finished = b.status === "reading" && b.pages > 0 && b.page >= b.pages;
+      if (finished) setBookStatus(b, "done");
+      toast(finished ? "¡Terminaste el libro! Pasó a tus leídos ✓" : "Guardado ✓"); $("#pop").close(); break;
+    }
+    case "book-del": if (!confirm("¿Borrar este libro de tu lista?")) return; S.books = drop(S.books); $("#pop").close(); break;
     case "open-menu": $("#sidebar").classList.toggle("open"); return;
     case "plan-warn": openPop("Plan-73 cambió", planWarnHTML); return;
     case "week-nav": { const dir = +el.dataset.dir; weekOff = dir === 0 ? 0 : Math.min(0, weekOff + dir); render(); return; }
@@ -1979,6 +2102,11 @@ document.addEventListener("change", (e) => {
   if (wf && wf !== "q") { wazaF[wf] = e.target.value; refreshWaza(); }
 });
 document.addEventListener("input", (e) => {
+  if (e.target.id === "book-q") {   // buscar libros mientras escribís
+    bookQ = e.target.value; clearTimeout(bookSearchT);
+    if (bookQ.trim().length < 3) { bookSug = []; bookBusy = false; bookErr = false; bookSearchN++; renderBookSug(); return; }
+    bookBusy = true; renderBookSug(); bookSearchT = setTimeout(() => bookSearch(bookQ.trim()), 400); return;
+  }
   if (e.target.id === "j-q") { jQ = e.target.value; $("#j-list").innerHTML = journalList(jQ); return; }
   if (e.target.name === "text" && e.target.closest("form[data-form=journal]")) { if (e.target.value) lsSet(J_DRAFT, e.target.value); else lsDel(J_DRAFT); return; }   // borrador
   if (e.target.dataset?.wf === "q") { wazaF.q = e.target.value; refreshWaza(); return; }

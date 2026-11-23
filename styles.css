@@ -1106,3 +1106,49 @@ kbd { padding: 1px 6px; border: 1px solid var(--line-2); border-radius: 6px; bac
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+/* ===================================================== */
+/* Lectura                                                */
+/* ===================================================== */
+.bgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.book { display: flex; gap: 14px; align-items: flex-start; width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--card-2); color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: border-color .15s, background .15s; }
+.book:hover { border-color: var(--accent); background: var(--card-3); }
+.bcover { position: relative; flex: none; display: grid; place-items: center; width: 56px; height: 84px; overflow: hidden; border-radius: 6px; background: linear-gradient(160deg, var(--card-3), var(--line-2)); box-shadow: 0 4px 12px rgba(0,0,0,.35); }
+.bcover i { font: 800 22px var(--display); font-style: normal; color: var(--muted); }
+.bcover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.bcover.sm { width: 44px; height: 66px; }
+.bcover.big { width: 96px; height: 144px; }
+.binfo { display: grid; gap: 4px; min-width: 0; flex: 1; }
+.binfo b { font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.bprog { display: grid; gap: 5px; margin-top: 4px; }
+.bstars { color: var(--amber); letter-spacing: 2px; font-size: 14px; }
+.bstars .off { color: var(--line-2); }
+.goal-sel { width: auto; min-height: 0; padding: 0 4px; margin: 0 2px; border: 0; border-bottom: 1px dashed var(--muted); border-radius: 0; background: none; color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.bsug-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.bsug { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card-2); }
+.bsug.manual { border-style: dashed; background: none; }
+.bsug-t { display: grid; flex: 1; min-width: 0; }
+.bsug-t b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bsug-b { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.bsug-note { padding: 6px 4px; color: var(--muted); font-size: 13px; }
+.bk-top { display: flex; gap: 16px; align-items: flex-start; }
+.bk-id { display: grid; flex: 1; gap: 8px; min-width: 0; }
+.bk-prog { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.bk-prog label { display: grid; gap: 4px; }
+.bk-stars { display: flex; gap: 4px; }
+.star { width: 40px; height: 40px; border: 0; border-radius: 10px; background: none; color: var(--line-2); font-size: 26px; line-height: 1; cursor: pointer; transition: color .15s, transform .15s; }
+.star:hover { transform: scale(1.1); }
+.star.on { color: var(--amber); }
+.bk-actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+@media (max-width: 600px) {
+  .bsug { flex-wrap: wrap; }
+  .bsug-b { width: 100%; justify-content: flex-start; }
+  .bk-prog { grid-template-columns: 1fr; }
+}
+@media (pointer: coarse), (max-width: 900px) { .card a.small, .card a.sub, .card-head a.sub { display: inline-block; padding: 8px 0; } }
+
+/* Listas en pantallas angostas: el texto va primero con su ancho, y etiquetas y botones pasan abajo si no entran */
+@media (max-width: 640px) {
+  .list li { flex-wrap: wrap; row-gap: 6px; }
+  .list li .grow { flex: 1 1 150px; min-width: 130px; }
+}
