@@ -24,11 +24,18 @@ function weekDates(off = 0) {      // lunes → domingo; off = semanas hacia atr
   d.setDate(d.getDate() - dif + off * 7);
   return [...Array(7)].map((_, i) => { const x = new Date(d); x.setDate(d.getDate() + i); return iso(x); });
 }
-function toast(msg) {
+function toast(msg, undo) {
   const t = $("#toast"), pop = $("#pop"), host = pop && pop.open ? pop : document.body;   // si hay un popup abierto, el aviso va adentro para que se vea
   if (t.parentNode !== host) host.appendChild(t);
-  t.textContent = msg; t.classList.add("show");
-  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 2200);
+  t.textContent = msg;
+  if (undo) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "toast-act"; b.textContent = "Deshacer";
+    b.addEventListener("click", () => { undo(); t.classList.remove("show", "has-act"); clearTimeout(toast.t); });
+    t.append(b);
+  }
+  t.classList.toggle("has-act", !!undo); t.classList.add("show");
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), undo ? 6500 : 2200);
 }
 
 /* ---------- Áreas ---------- */
@@ -449,7 +456,7 @@ function notesCard(key, title = "Notas", cls = "") {
       <input name="text" placeholder="Anotá algo…" required /><button class="btn btn-primary">Agregar</button>
     </form>
     <ul class="list notes" style="margin-top:12px">
-      ${list.map((n) => `<li><span class="grow">${esc(n.text)}</span><span class="small muted mono">${fmtDate(n.date)}</span><button class="del" data-act="del-note" data-key="${key}" data-id="${n.id}">✕</button></li>`).join("") || `<li class="empty" style="background:none">Sin notas todavía.</li>`}
+      ${list.map((n) => `<li><span class="grow">${esc(n.text)}</span><span class="small muted mono">${fmtDate(n.date)}</span><button class="del" data-act="del-note" data-key="${key}" data-id="${n.id}">✕</button></li>`).join("") || `<li class="empty" style="background:none">Todavía no hay notas. Anotá algo arriba.</li>`}
     </ul>
   </div>`;
 }
@@ -467,7 +474,7 @@ function checklist(key, title, placeholder, cls = "") {
           <input type="checkbox" data-act="toggle-check" data-key="${key}" data-id="${t.id}" ${t.done ? "checked" : ""} />
           <span class="grow">${esc(t.text)}</span>
           <button class="del" data-act="del-check" data-key="${key}" data-id="${t.id}">✕</button>
-        </li>`).join("") || `<li class="empty" style="background:none">Vacío.</li>`}
+        </li>`).join("") || `<li class="empty" style="background:none">Todavía no hay nada. Escribí arriba y tocá Agregar.</li>`}
     </ul>
   </div>`;
 }
@@ -1675,17 +1682,114 @@ function renderNav() {
   const cur = route();
   $("#nav").innerHTML = NAV.map((g) => `${g.group ? `<div class="nav-group">${g.group}</div>` : ""}${g.items.map(([id, label]) =>
     `<a href="#${id}" class="${id === cur ? "active" : ""}" ${id === cur ? 'aria-current="page"' : ""}><span class="ni"><svg viewBox="0 0 24 24"><path d="${ICONS[id]}"/></svg></span>${label}</a>`).join("")}`).join("");
+  renderTabbar();
 }
 const routeLabel = (r) => NAV.flatMap((g) => g.items).find(([id]) => id === r)?.[1] || "Inicio";
 function render() {
   renderNav();
   $("#view").innerHTML = VIEWS[route()]();
+  enhanceView();
   $("#top-sync").innerHTML = syncBadge();
   document.title = route() === "inicio" ? "Manu HQ" : `${routeLabel(route())} · Manu HQ`;
   refreshPop();
   if (route() === "pinterest") buildPins();
   if (route() === "media") hydrateMedia($("#view"));
 }
+/* =========================================================
+   Estructura de la app: barra inferior (celular), buscador rápido
+   y retoques de accesibilidad que se aplican a todas las secciones
+   ========================================================= */
+const TABS = [["inicio", "Inicio"], ["rutina", "Gym"], ["comida", "Comida"], ["calendario", "Calendario"]];
+function renderTabbar() {
+  const cur = route(), more = !TABS.some(([id]) => id === cur);
+  $("#tabbar").innerHTML = TABS.map(([id, label]) => `<a href="#${id}" class="${id === cur ? "active" : ""}" ${id === cur ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[id]}"/></svg><span>${label}</span></a>`).join("")
+    + `<button type="button" class="${more ? "active" : ""}" data-act="open-menu" aria-label="Más secciones"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>${more ? esc(routeLabel(cur)) : "Más"}</span></button>`;
+}
+/* Cada sección arranca con su grupo (Cuerpo, Vida, Trabajo) para que siempre sepas dónde estás, y todos los campos tienen nombre para lectores de pantalla */
+function enhanceView() {
+  const v = $("#view"), head = v.querySelector(".page-head > div");
+  if (head && !head.querySelector(".kicker")) {
+    const g = NAV.find((x) => x.group && x.items.some(([id]) => id === route()))?.group;
+    if (g) head.insertAdjacentHTML("afterbegin", `<div class="kicker">${esc(g)}</div>`);
+  }
+  v.querySelectorAll("input:not([type=hidden]):not([type=checkbox]):not([aria-label]), textarea:not([aria-label]), select:not([aria-label])").forEach((el) => {
+    if (el.closest("label") || (el.id && v.querySelector(`label[for="${el.id}"]`))) return;
+    const t = el.getAttribute("placeholder") || el.closest(".field")?.querySelector("span")?.textContent || el.name;
+    if (t) el.setAttribute("aria-label", t);
+  });
+  v.querySelectorAll("input[type=checkbox]:not([aria-label])").forEach((el) => {
+    const t = el.closest("li")?.querySelector(".grow")?.textContent?.trim();
+    el.setAttribute("aria-label", t ? "Marcar: " + t.slice(0, 60) : "Marcar");
+  });
+  v.querySelectorAll("button.del:not([aria-label])").forEach((b) => b.setAttribute("aria-label", "Borrar"));
+}
+
+/* ---------- Buscador rápido: Ctrl + K (o "/") ---------- */
+let cmdkSel = 0, cmdkRows = [];
+function cmdkItems(q) {
+  const t = plain(q.trim()), terms = t.split(/\s+/).filter(Boolean), hit = (s) => terms.every((w) => plain(s).includes(w));
+  const acts = [
+    { k: "Acción", label: "Marcar el entreno de hoy", hint: "Gym", run: () => act({ dataset: { act: "done-today" } }) },
+    { k: "Acción", label: "Ver el calendario de entreno y marcar días", hint: "Gym", run: () => act({ dataset: { act: "open-cal" } }) },
+    { k: "Acción", label: "Escribir en el diario", hint: "Diario", go: "diario", focus: "form[data-form=journal] textarea" },
+    { k: "Acción", label: "Anotar una idea", hint: "Ideas", run: () => $("#quick-idea input").focus() },
+    { k: "Acción", label: "Agregar un libro", hint: "Lectura", go: "lectura", focus: "#book-q" },
+    { k: "Acción", label: "Pegar una foto", hint: "Media", go: "media" },
+    { k: "Acción", label: "Abrir Spotify", hint: "Música", run: () => $("#mini-open").click() },
+    { k: "Acción", label: "Abrir SoundCloud", hint: "Música", run: () => $("#scmini-open").click() },
+  ];
+  const secs = NAV.flatMap((g) => g.items.map(([id, label]) => ({ k: "Ir a", label, hint: g.group || "", go: id, icon: id })));
+  const items = terms.length ? [...secs, ...acts].filter((x) => hit(`${x.label} ${x.hint}`)) : [...acts.slice(0, 4), ...secs];
+  if (t.length >= 2) {   // también busca en lo que escribiste
+    [["Tarea", S.tasks, (x) => x.text, "inicio"], ["Idea", S.ideas, (x) => x.text, "ideas"], ["Diario", S.journal, (x) => x.text, "diario"],
+      ["Compra", S.buy, (x) => x.text, "compras"], ["Para ver", S.watch, (x) => x.text, "watch"], ["Estudio", S.study, (x) => `${x.subject} ${x.text}`, "estudio"],
+      ["Proyecto", S.projects, (x) => x.name, "proyectos"], ["Libro", S.books || [], (x) => `${x.title} ${x.author || ""}`, "lectura"]]
+      .forEach(([k, arr, f, go]) => arr.filter((x) => hit(f(x))).slice(0, 4).forEach((x) => items.push({ k, label: String(f(x)).replace(/\s+/g, " ").trim().slice(0, 80), hint: "", go })));
+  }
+  return items.slice(0, 40);
+}
+function renderCmdk() {
+  cmdkRows = cmdkItems($("#cmdk-q").value);
+  cmdkSel = Math.min(cmdkSel, Math.max(cmdkRows.length - 1, 0));
+  $("#cmdk-list").innerHTML = cmdkRows.length ? cmdkRows.map((r, i) => `<li role="option" id="cmdk-${i}" aria-selected="${i === cmdkSel}" class="cmdk-it ${i === cmdkSel ? "on" : ""}" data-i="${i}">
+    ${r.icon && ICONS[r.icon] ? `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[r.icon]}"/></svg>` : `<span class="cmdk-dot"></span>`}
+    <span class="cmdk-l">${esc(r.label)}</span><span class="cmdk-k">${esc(r.k)}${r.hint ? ` · ${esc(r.hint)}` : ""}</span></li>`).join("") : `<li class="cmdk-empty">No encontré nada con eso.</li>`;
+  $("#cmdk-q").setAttribute("aria-activedescendant", cmdkRows.length ? `cmdk-${cmdkSel}` : "");
+  $("#cmdk-list .on")?.scrollIntoView({ block: "nearest" });
+}
+function cmdkGo(i) {
+  const r = cmdkRows[i]; if (!r) return;
+  $("#cmdk").close();
+  if (r.run) setTimeout(r.run, 40);
+  else { location.hash = "#" + r.go; if (r.focus) setTimeout(() => $(r.focus)?.focus(), 400); }
+}
+function openCmdk() {
+  const d = $("#cmdk"); if (d.open) return;
+  $("#sidebar").classList.remove("open");
+  $("#cmdk-q").value = ""; cmdkSel = 0; renderCmdk();
+  d.showModal(); $("#cmdk-q").focus();
+}
+$("#cmdk-open").addEventListener("click", openCmdk);
+$("#cmdk-q").addEventListener("input", () => { cmdkSel = 0; renderCmdk(); });
+$("#cmdk-q").addEventListener("keydown", (e) => {
+  const n = Math.max(cmdkRows.length, 1);
+  if (e.key === "ArrowDown") { e.preventDefault(); cmdkSel = (cmdkSel + 1) % n; renderCmdk(); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); cmdkSel = (cmdkSel - 1 + n) % n; renderCmdk(); }
+  else if (e.key === "Enter") { e.preventDefault(); cmdkGo(cmdkSel); }
+});
+$("#cmdk-list").addEventListener("click", (e) => { const li = e.target.closest("[data-i]"); if (li) cmdkGo(+li.dataset.i); });
+$("#cmdk-list").addEventListener("mouseover", (e) => {
+  const li = e.target.closest("[data-i]"); if (!li || +li.dataset.i === cmdkSel) return;
+  cmdkSel = +li.dataset.i; $("#cmdk-list .on")?.classList.remove("on"); li.classList.add("on");
+});
+$("#cmdk").addEventListener("click", (e) => { if (e.target === $("#cmdk")) $("#cmdk").close(); });
+document.addEventListener("keydown", (e) => {
+  const typing = e.target.matches?.("input, textarea, select, [contenteditable]");
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); openCmdk(); }
+  else if (e.key === "/" && !typing && !e.ctrlKey && !e.metaKey && !e.altKey && entered) { e.preventDefault(); openCmdk(); }
+});
+
+const UNDOABLE = /^(del-task|del-check|del-weight|del-study|del-idea|del-content|del-note|del-ptask|del-vocab|del-lang-res|del-pin|clear-bought|clear-watched)$/;
 window.addEventListener("hashchange", () => {
   if (route() === "rutina" && !render.keepDay) { selDay = new Date().getDay(); weekOff = 0; }
   if (route() === "calendario") { calMonth = null; calSel = null; }
@@ -1755,6 +1859,7 @@ function act(el) {
   const { act: a, id, key, pid } = el.dataset;
   const byId = (arr) => arr.find((x) => x.id === id);
   const drop = (arr) => arr.filter((x) => x.id !== id);
+  const snap = UNDOABLE.test(a) ? structuredClone(S) : null;   // para poder deshacer
   switch (a) {
     case "toggle-task": byId(S.tasks).done = el.checked; break;
     case "del-task": S.tasks = drop(S.tasks); break;
@@ -1786,6 +1891,7 @@ function act(el) {
     case "open-sync": $("#sync-btn").click(); return;
     case "del-pin": S.pins = drop(S.pins); break;
     case "pin-tag": pinTag = el.dataset.t; render(); return;
+    case "open-menu": $("#sidebar").classList.toggle("open"); return;
     case "plan-warn": openPop("Plan-73 cambió", planWarnHTML); return;
     case "week-nav": { const dir = +el.dataset.dir; weekOff = dir === 0 ? 0 : Math.min(0, weekOff + dir); render(); return; }
     case "gym-day": {     // marcar o desmarcar un entreno de hoy o de un día que ya pasó
@@ -1860,6 +1966,7 @@ function act(el) {
     default: return;
   }
   commit();
+  if (snap) toast(a.startsWith("clear") ? "Lista vaciada" : "Borrado", () => { S = snap; commit(); });
 }
 document.addEventListener("click", (e) => {
   const el = e.target.closest("[data-act]");
@@ -1943,10 +2050,10 @@ $("#import-file").addEventListener("change", async (e) => {
 const SYNC_KEY = "manuhq-sync", SYNC_FILE = "manu-hq-data.json", GH_API = "https://api.github.com";
 let SYNC = (() => { try { return JSON.parse(lsGet(SYNC_KEY)) || {}; } catch (e) { return {}; } })();
 let pushT = null, syncBusy = false;
-const SYNC_TXT = { off: "Sincronizar dispositivos", busy: "Sincronizando…", ok: "Sincronizado ✓", err: "Sin conexión · reintenta solo", auth: "Token inválido · reconectar" };
+const SYNC_TXT = { off: "Datos y sincronización", busy: "Sincronizando…", ok: "Sincronizado", err: "Sin conexión · reintenta", auth: "Token inválido" };
 function setSync(st) {
   setSync.st = st;
-  const b = $("#sync-btn"); if (b) { b.textContent = SYNC_TXT[st]; b.dataset.st = st; }
+  const b = $("#sync-btn"); if (b) { const l = $("#sync-label"); if (l) l.textContent = SYNC_TXT[st]; b.dataset.st = st; }
   const s = $("#sync-status"); if (s) s.textContent = SYNC.token ? SYNC_TXT[st] : "Sin conectar";
 }
 const saveSync = () => lsSet(SYNC_KEY, JSON.stringify(SYNC));
@@ -2098,7 +2205,7 @@ syncNow();
 $("#menu-btn").addEventListener("click", () => $("#sidebar").classList.toggle("open"));
 document.addEventListener("click", (e) => {
   const sb = $("#sidebar");
-  if (sb.classList.contains("open") && !sb.contains(e.target) && !e.target.closest("#menu-btn")) sb.classList.remove("open");
+  if (sb.classList.contains("open") && !sb.contains(e.target) && !e.target.closest("#menu-btn, [data-act=open-menu]")) sb.classList.remove("open");
 });
 
 /* =========================================================
