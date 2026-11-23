@@ -27,6 +27,7 @@ Mi hub personal: rutina y comida de Plan-73, judo, cambio físico, calendario, h
 ## Atajos y uso
 - **Ctrl + K** (o **/**): buscador rápido. Va a cualquier sección, hace acciones (marcar el entreno, escribir en el diario…) y busca en lo que escribí (tareas, ideas, diario, libros…).
 - **Celular**: barra inferior con Inicio, Gym, Comida, Calendario y Más (que abre todas las secciones).
+- **Notas**: cada sección tiene sus notas en un panel plegable (se abre con un toque; muestra cuántas hay).
 - **Deshacer**: al borrar una tarea, nota, idea, etc. aparece un aviso con "Deshacer" unos segundos.
 - **Datos y sincronización** (abajo del menú): conectar los dispositivos, exportar e importar una copia de seguridad.
 

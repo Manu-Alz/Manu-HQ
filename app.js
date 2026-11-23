@@ -423,6 +423,7 @@ const syncBadge = () => planWarn.length ? `<button class="sync warn" type="butto
 /* =========================================================
    Componentes
    ========================================================= */
+const warnBadge = () => planWarn.length ? syncBadge() : "";
 const head = (title, sub, actions = "", kicker = "") => `<div class="page-head"><div>${kicker ? `<div class="kicker">${kicker}</div>` : ""}<h1>${title}</h1>${sub ? `<p>${sub}</p>` : ""}</div>${actions ? `<div class="actions">${actions}</div>` : ""}</div>`;
 
 function tasksCard(area, title = "Pendientes", cls = "") {
@@ -433,8 +434,8 @@ function tasksCard(area, title = "Pendientes", cls = "") {
     <div class="card-head"><h2>${title}</h2><span class="sub">${list.filter((t) => !t.done).length} abiertas</span></div>
     <form class="inline" data-form="task" data-area="${area || ""}">
       <input name="text" placeholder="Nueva tarea…" required />
-      ${area ? "" : `<select name="area" style="flex:0 1 140px">${TASK_AREAS.map((k) => `<option value="${k}">${LABELS[k]}</option>`).join("")}</select>`}
-      <input name="due" type="date" title="Fecha (opcional)" aria-label="Fecha (opcional)" style="flex:0 1 145px" />
+      ${area ? "" : `<select name="area" class="opt" style="flex:0 1 140px">${TASK_AREAS.map((k) => `<option value="${k}">${LABELS[k]}</option>`).join("")}</select>`}
+      <input name="due" type="date" class="opt" title="Fecha (opcional)" aria-label="Fecha (opcional)" />
       <button class="btn btn-primary">Agregar</button>
     </form>
     <ul class="list" style="margin-top:12px">
@@ -451,18 +452,23 @@ function tasksCard(area, title = "Pendientes", cls = "") {
 }
 
 /* Notas propias de cada sección (se guardan solas) */
+const notesOpen = {};
+document.addEventListener("toggle", (e) => { const k = e.target?.dataset?.nk; if (k) notesOpen[k] = e.target.open; }, true);
 function notesCard(key, title = "Notas", cls = "") {
   const list = S.notes[key] || [];
+  const open = key in notesOpen ? notesOpen[key] : list.length > 0;
   return `
-  <div class="card ${cls}">
-    <div class="card-head"><h2>${title}</h2><span class="sub">${list.length}</span></div>
+  <details class="card notes-card ${cls}" data-nk="${key}" ${open ? "open" : ""}>
+    <summary><span>${title}</span><span class="sub">${list.length ? list.length : "vacío"}</span></summary>
+    <div class="nc-body">
     <form class="inline" data-form="note" data-key="${key}">
       <input name="text" placeholder="Anotá algo…" required /><button class="btn btn-primary">Agregar</button>
     </form>
     <ul class="list notes" style="margin-top:12px">
       ${list.map((n) => `<li><span class="grow">${esc(n.text)}</span><span class="small muted mono">${fmtDate(n.date)}</span><button class="del" data-act="del-note" data-key="${key}" data-id="${n.id}">✕</button></li>`).join("") || `<li class="empty" style="background:none">Todavía no hay notas. Anotá algo arriba.</li>`}
     </ul>
-  </div>`;
+    </div>
+  </details>`;
 }
 
 function checklist(key, title, placeholder, cls = "") {
@@ -1011,39 +1017,35 @@ const VIEWS = {
         </div>
       </div>
       <div class="c-4 side stack">
-        <div class="kpis">
-          <a class="kpi" href="#fisico"><span class="label-sm">Peso</span><div class="v">${nowKg ?? "—"}<small>kg</small></div><div class="d">meta ${esc(G.walkingTxt)} caminando</div><div class="bar"><i style="width:${pct}%"></i></div></a>
-          <button class="kpi" type="button" data-act="open-cal" title="Abrir el calendario para ver y marcar días"><span class="label-sm">Semana</span><div class="v">${gymWeek}<small>/ ${trainDays}</small></div><div class="d">días de entreno · tocá para marcar</div><div class="bar"><i style="width:${Math.min(100, (gymWeek / trainDays) * 100)}%"></i></div></button>
-          <a class="kpi" href="#judo"><span class="label-sm">Técnicas</span><div class="v">${dom}<small>/ 100</small></div><div class="d">dominadas</div><div class="bar"><i style="width:${dom}%"></i></div></a>
-          <a class="kpi" href="#idiomas"><span class="label-sm">Idiomas</span><div class="v">${bestLang ? bestLang.n : "—"}${bestLang ? "<small>días</small>" : ""}</div><div class="d">${bestLang ? `racha en ${esc(bestLang.l.name)}` : "agregá un idioma"}</div></a>
+        <div class="card summary">
+          <a class="srow" href="#fisico"><span class="sl">Peso</span><span class="sv">${nowKg ?? "—"}<small>kg</small></span><span class="sd">meta ${esc(G.walkingTxt)} caminando</span><span class="bar"><i style="width:${pct}%"></i></span></a>
+          <button class="srow" type="button" data-act="open-cal" title="Abrir el calendario para ver y marcar días"><span class="sl">Esta semana</span><span class="sv">${gymWeek}<small>/ ${trainDays}</small></span><span class="sd">días de entreno · tocá para marcar</span><span class="bar"><i style="width:${Math.min(100, (gymWeek / trainDays) * 100)}%"></i></span></button>
+          <a class="srow" href="#judo"><span class="sl">Técnicas de judo</span><span class="sv">${dom}<small>/ 100</small></span><span class="sd">dominadas</span><span class="bar"><i style="width:${dom}%"></i></span></a>
+          <a class="srow" href="#idiomas"><span class="sl">Idiomas</span><span class="sv">${bestLang ? bestLang.n : "—"}${bestLang ? "<small>días</small>" : ""}</span><span class="sd">${bestLang ? `racha en ${esc(bestLang.l.name)}` : "agregá un idioma"}</span></a>
         </div>
-        <div class="card quote-card">
-          <span class="label-sm">Judo · frase</span>
-          <blockquote>${esc(JUDO_QUOTES[quoteIdx][0])}</blockquote>
-          <span class="src">${esc(JUDO_QUOTES[quoteIdx][1])}</span>
-        </div>
+        <p class="quote-line">“${esc(JUDO_QUOTES[quoteIdx][0])}”<b>${esc(JUDO_QUOTES[quoteIdx][1])}</b></p>
       </div>
     </div>
     <div class="bento"><div class="c-12">${gymCal({ mark: false, nav: false, go: true, head: false })}</div></div>
     ${platoCard()}
     <div class="bento">
-      ${tasksCard(null, "Tareas", "c-5")}
-      <div class="card c-4">
+      ${tasksCard(null, "Tareas", "c-6")}
+      <div class="card c-6">
         <div class="card-head"><h2>Ideas</h2><a href="#ideas" class="sub">ver todas (${S.ideas.length})</a></div>
-        <ul class="list">${S.ideas.slice(0, 6).map((i) => `<li><span class="grow">${esc(i.text)}</span>${i.tag !== "general" ? tag(i.tag) : ""}</li>`).join("") || `<li class="empty" style="background:none">Usá la barra de arriba para anotar una idea. Se guarda sola.</li>`}</ul>
+        <ul class="list">${S.ideas.slice(0, 6).map((i) => `<li><span class="grow">${esc(i.text)}</span>${i.tag !== "general" ? tag(i.tag) : ""}</li>`).join("") || `<li class="empty">Usá la barra de arriba para anotar una idea. Se guarda sola.</li>`}</ul>
       </div>
-      <div class="c-3 stack">
-        <div class="card">
-          <div class="card-head"><h2>Proyectos</h2><a href="#proyectos" class="sub">ver</a></div>
-          ${active.map((p) => {
-            const pc = p.tasks.length ? Math.round((p.tasks.filter((t) => t.done).length / p.tasks.length) * 100) : 0;
-            return `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;margin-bottom:6px"><b style="font-weight:500">${esc(p.name)}</b><span class="sub mono small muted">${pc}%</span></div><div class="progress"><div style="width:${pc}%"></div></div></div>`;
-          }).join("") || `<p class="empty">Ninguno activo.</p>`}
-        </div>
-        <div class="card">
-          <div class="card-head"><h2>Estudio</h2><a href="#estudio" class="sub">ver</a></div>
-          <ul class="list">${study.map((s) => `<li><span class="grow"><b style="font-weight:500">${esc(s.subject)}</b> · ${esc(s.text)}</span><span class="small muted mono">${fmtDate(s.due)}</span></li>`).join("") || `<li class="empty" style="background:none">Nada pendiente.</li>`}</ul>
-        </div>
+    </div>
+    <div class="bento">
+      <div class="card c-6">
+        <div class="card-head"><h2>Proyectos activos</h2><a href="#proyectos" class="sub">ver</a></div>
+        ${active.map((p) => {
+          const pc = p.tasks.length ? Math.round((p.tasks.filter((t) => t.done).length / p.tasks.length) * 100) : 0;
+          return `<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;margin-bottom:6px"><b style="font-weight:500">${esc(p.name)}</b><span class="sub small muted">${pc}%</span></div><div class="progress"><div style="width:${pc}%"></div></div></div>`;
+        }).join("") || `<p class="empty">Ninguno activo.</p>`}
+      </div>
+      <div class="card c-6">
+        <div class="card-head"><h2>Estudio</h2><a href="#estudio" class="sub">ver</a></div>
+        <ul class="list">${study.map((s) => `<li><span class="grow"><b style="font-weight:500">${esc(s.subject)}</b> · ${esc(s.text)}</span><span class="small muted">${fmtDate(s.due)}</span></li>`).join("") || `<li class="empty">Nada pendiente.</li>`}</ul>
       </div>
     </div>`;
   },
@@ -1092,7 +1094,7 @@ const VIEWS = {
     }
     const html = `
     ${head("Rutina / Gym", PLAN?.updated ? esc(PLAN.updated) : "Plan-73: fuerza y potencia para judo −73 kg.",
-      `${syncBadge()}<a class="btn" href="${PLAN73}" target="_blank" rel="noopener">Abrir Plan-73 ↗</a>`, "Plan-73")}
+      `${warnBadge()}<a class="btn" href="${PLAN73}" target="_blank" rel="noopener">Abrir Plan-73 ↗</a>`, "Plan-73")}
     ${PLAN ? `<div class="filters">${PLAN.blocks.map((x) => `<button class="chip ${x.id === b.id ? "on" : ""}" data-act="sel-block" data-block="${x.id}">${esc(x.name)}<span class="muted small mono">${esc(x.weeks)}</span>${x.id === cur.id ? `<span class="dot" style="background:var(--accent)" title="Bloque actual en Plan-73"></span>` : ""}</button>`).join("")}</div>` : ""}
     <div class="bento"><div class="c-12">${gymCal({ sel: selDay, R })}</div></div>
     <div class="bento">
@@ -1152,7 +1154,7 @@ const VIEWS = {
     const perWeek = weeks >= 1 ? ((last.kg - first.kg) / weeks).toFixed(2).replace(".", ",") : null;
     const N = PLAN?.nutrition, ST = PLAN?.strength;
     return `
-    ${head("Cambio físico", `Metas de Plan-73 · ${esc(G.rateTxt)}.`, syncBadge())}
+    ${head("Cambio físico", `Metas de Plan-73 · ${esc(G.rateTxt)}.`, warnBadge())}
     <div class="kpis row4" style="margin-bottom:16px">
       <div class="kpi"><span class="label-sm">Peso actual</span><div class="v">${last ? last.kg : G.now ?? "—"}<small>kg</small></div><div class="d">${last ? fmtDate(last.date) : G.nowTxt ? "según Plan-73" : ""}</div></div>
       <div class="kpi"><span class="label-sm">Cambio total</span><div class="v">${diff > 0 ? "+" : ""}${diff}<small>kg</small></div><div class="d">${perWeek ? `${perWeek} kg/semana · meta ${esc(G.rate)}` : `meta ${esc(G.rate)} kg/semana`}</div></div>
@@ -1217,7 +1219,7 @@ const VIEWS = {
     const mK = meta(/calor/i), mP = meta(/prote/i), planned = ROUTINE[dow];
     const totalRow = D?.rows.find(isTotal);
     return `
-    ${head("Comida", "Qué comer hoy, con la receta de cada cosa. Todo sale de Plan-73.", syncBadge())}
+    ${head("Comida", "Qué comer hoy, con la receta de cada cosa. Todo sale de Plan-73.", warnBadge())}
     ${!D ? `<div class="card"><p class="empty">${PLAN ? "Plan-73 no tiene días de comida armados." : "Cargando Plan-73…"}</p></div>` : `
     ${cookToday ? `<div class="card cook-today" style="margin-bottom:16px"><div class="card-head"><span class="label-sm">Hoy se cocina · ${DAY_NAMES[dow]}</span></div><div class="plan-html" style="margin:0">${cookToday.html}</div></div>` : ""}
     <div class="bento">
@@ -1286,7 +1288,7 @@ const VIEWS = {
     const hn = hs.filter((h) => (h.gym ? gymDone(sel) : (S.habits[sel] || []).includes(h.key))).length;
     const undated = S.tasks.filter((x) => !x.due && !x.done);
     return `
-    ${head("Calendario", "Todo junto: entrenos, tareas, entregas de estudio y pesajes. Tocá un día para ver o agregar.", syncBadge())}
+    ${head("Calendario", "Todo junto: entrenos, tareas, entregas de estudio y pesajes. Tocá un día para ver o agregar.", warnBadge())}
     <div class="bento">
       <div class="card c-8">
         <div class="cal-head">
@@ -1470,7 +1472,7 @@ const VIEWS = {
     const long0 = new Date(hd + "T12:00:00").toLocaleDateString("es-UY", { weekday: "long", day: "numeric", month: "long" }), long = long0.charAt(0).toUpperCase() + long0.slice(1);
     const dates = weekDates();
     return `
-    ${head("Hábitos", "Check-in de cada día: lo que pide Plan-73 todos los días.", syncBadge())}
+    ${head("Hábitos", "Check-in de cada día: lo que pide Plan-73 todos los días.", warnBadge())}
     <div class="bento">
       <div class="card c-7">
         <div class="hdate">
