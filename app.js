@@ -47,6 +47,7 @@ const ICONS = {
   judo: "M3 9h18v4H3zM10 13l-2.5 8M14 13l2.5 8M12 3v6",
   fisico: "M3 3v18h18M7 15l4-4 3 3 5-6",
   surf: "M2 8c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 13c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 18c2-2 4-2 6 0s4 2 6 0 4-2 6 0",
+  media: "M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM21 15l-5-5L5 21",
   pinterest: "M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zM12 11.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z",
   diario: "M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z",
   calendario: "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
@@ -64,7 +65,7 @@ const NAV = [
   { group: null, items: [["inicio", "Inicio"]] },
   { group: "Cuerpo", items: [["rutina", "Rutina / Gym"], ["comida", "Comida"], ["judo", "Judo"], ["fisico", "Cambio físico"], ["surf", "Surf"]] },
   { group: "Vida", items: [["calendario", "Calendario"], ["habitos", "Hábitos"], ["diario", "Diario"], ["estudio", "Estudio"], ["idiomas", "Idiomas"], ["compras", "Compras"], ["watch", "Watch list"]] },
-  { group: "Trabajo", items: [["proyectos", "Proyectos"], ["contenido", "Contenido"], ["ideas", "Ideas"], ["pinterest", "Pinterest"]] },
+  { group: "Trabajo", items: [["proyectos", "Proyectos"], ["contenido", "Contenido"], ["ideas", "Ideas"], ["pinterest", "Pinterest"], ["media", "Media"]] },
 ];
 
 /* ---------- Estado ---------- */
@@ -98,6 +99,8 @@ const DEFAULT_STATE = {
   sc: [],                      // lista de SoundCloud: { id, url, name, img, date }
   journal: [],                 // diario: { id, text, date, time? }
   pins: [],                    // Pinterest: { id, url, kind: "pin" | "board" | "user", tag, date }
+  media: [],                   // fotos: solo la ficha { id, tag, date, w, h, kb }; la foto está en IndexedDB y en un gist aparte
+  mediaGist: "",               // id del gist donde se guardan las fotos
 };
 
 /* ---------- Niveles de idiomas ---------- */
@@ -118,7 +121,7 @@ function normalize(data) {
   const s = { ...structuredClone(DEFAULT_STATE), ...data };
   s.logs = { ...DEFAULT_STATE.logs, ...s.logs };
   for (const k of ["waza", "notes", "habits"]) s[k] = s[k] || {};
-  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "langs", "buy", "watch", "music", "sc", "journal", "pins"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
+  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "langs", "buy", "watch", "music", "sc", "journal", "pins", "media"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
   // Las notas libres viejas de Uruguay pasan a la lista de notas (una sola vez)
   if (s.uyNotes) { (s.notes.uruguay = s.notes.uruguay || []).unshift({ id: uid(), text: s.uyNotes, date: today() }); }
   // "Estilo de vida" se reemplazó por Hábitos: sus lugares y notas pasan a Ideas, una sola vez.
@@ -512,14 +515,14 @@ function openPop(title, fn, cls = "") {
   const dlg = $("#pop");
   dlg.className = "dlg pop " + cls;
   $("#pop-title").textContent = title;
-  $("#pop-body").innerHTML = fn();
+  $("#pop-body").innerHTML = fn(); hydrateMedia($("#pop-body"));
   if (!dlg.open) dlg.showModal();
   $("#pop-body").scrollTop = 0;
 }
 function refreshPop() {   // si hay un popup abierto lo redibuja (por ejemplo, después de marcar un día)
   if (!popFn || !$("#pop").open) return;
   const b = $("#pop-body"), y = b.scrollTop;
-  b.innerHTML = popFn(); b.scrollTop = y;
+  b.innerHTML = popFn(); b.scrollTop = y; hydrateMedia(b);
 }
 
 /* ---------- Calendario de entreno: la semana en fila, de lunes a domingo ---------- */
@@ -739,6 +742,163 @@ function buildPins() {   // arma los widgets de los links que hay en pantalla
   if (!box || !box.querySelector("a[data-pin-do]")) return;
   // la primera vez, el script de Pinterest arma solo lo que hay en pantalla; las siguientes veces hay que pedírselo
   pinit().then((fresh) => { if (!fresh && $("#pins-wrap") === box && box.querySelector("a[data-pin-do]")) window.PinUtils.build(box); }).catch(() => toast("No pude cargar Pinterest (¿un bloqueador?). Los links igual abren."));
+}
+
+/* ---------- Media: fotos pegadas, guardadas en este dispositivo y sincronizadas ---------- */
+/* Las fotos pesan mucho más que el resto de los datos, así que no van en el gist de datos:
+   - en cada dispositivo viven en IndexedDB (mucho más espacio que localStorage);
+   - en la lista de datos (que ya se sincroniza) queda solo una ficha de cada foto: id, etiqueta, fecha y medidas;
+   - las fotos mismas se suben a un SEGUNDO gist secreto ("Manu HQ · fotos"), un archivo por foto, y los otros
+     dispositivos las bajan de ahí. Cada foto se reduce a 1280 px, JPEG, para que pese poco. */
+let mediaTag = "";                       // etiqueta elegida para filtrar
+const mediaLocal = new Set();            // fotos que este dispositivo tiene guardadas
+let mediaReady = false, mediaBusy = false, mediaFail = false, mediaT = null;
+const lsJSON = (k, d) => { try { return JSON.parse(lsGet(k)) ?? d; } catch (e) { return d; } };
+const mediaOk = new Set(lsJSON("manuhq-mediaok", []));        // fotos que ya están en la nube (en este dispositivo)
+const mediaSaveOk = () => lsSet("manuhq-mediaok", JSON.stringify([...mediaOk]));
+const mediaDelQ = () => lsJSON("manuhq-mediadel", []);        // fotos que borré acá y falta borrar de la nube
+
+/* IndexedDB mínimo: clave = id de la foto, valor = la foto como texto (data URL) */
+const idb = () => idb.p || (idb.p = new Promise((res, rej) => {
+  if (!window.indexedDB) { rej(new Error("sin IndexedDB")); return; }
+  const r = indexedDB.open("manuhq-media", 1);
+  r.onupgradeneeded = () => r.result.createObjectStore("img");
+  r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+}));
+const idbTx = async (mode, fn) => { const db = await idb(); return new Promise((res, rej) => { const t = db.transaction("img", mode), q = fn(t.objectStore("img")); t.oncomplete = () => res(q && q.result); t.onerror = () => rej(t.error); }); };
+const idbPut = (k, v) => idbTx("readwrite", (s) => s.put(v, k));
+const idbGet = (k) => idbTx("readonly", (s) => s.get(k));
+const idbDel = (k) => idbTx("readwrite", (s) => s.delete(k));
+const idbKeys = () => idbTx("readonly", (s) => s.getAllKeys());
+
+/* Reduce la foto: lado largo 1280 px, JPEG */
+async function mediaProcess(file) {
+  let src;
+  try { src = await createImageBitmap(file); }
+  catch (e) { src = await new Promise((res, rej) => { const u = URL.createObjectURL(file), im = new Image(); im.onload = () => { URL.revokeObjectURL(u); res(im); }; im.onerror = () => rej(new Error("no se pudo leer")); im.src = u; }); }
+  const sw = src.width || src.naturalWidth, sh = src.height || src.naturalHeight, k = Math.min(1, 1280 / Math.max(sw, sh));
+  const w = Math.max(1, Math.round(sw * k)), h = Math.max(1, Math.round(sh * k));
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, w, h); g.drawImage(src, 0, 0, w, h);
+  return { data: c.toDataURL("image/jpeg", 0.8), w, h };
+}
+async function mediaAdd(files) {
+  files = [...files].filter((f) => f.type.startsWith("image/")).slice(0, 30);
+  if (!files.length) return;
+  const tag = ($("#media-tag")?.value || "").trim().slice(0, 30), batch = [];
+  toast(`Guardando ${files.length} foto${files.length === 1 ? "" : "s"}…`);
+  let unreadable = 0, nosave = false;
+  for (const f of files) {
+    let p; try { p = await mediaProcess(f); } catch (e) { unreadable++; console.warn("foto:", e); continue; }
+    const id = uid();
+    try { await idbPut(id, p.data); } catch (e) { nosave = true; console.warn("foto:", e); continue; }
+    mediaLocal.add(id);
+    batch.push({ id, tag, date: today(), w: p.w, h: p.h, kb: Math.round((p.data.length * 0.75) / 1024) });
+  }
+  if (batch.length) { S.media.unshift(...batch); save(); render(); mediaTick(); toast(`${batch.length} foto${batch.length === 1 ? "" : "s"} guardada${batch.length === 1 ? "" : "s"} ✓`); }
+  if (nosave) toast("Este navegador no deja guardar fotos (¿ventana privada?)");
+  else if (unreadable) toast(batch.length ? "Alguna imagen no se pudo leer" : "No pude leer esa imagen");
+}
+function mediaDropLocal(id) {
+  idbDel(id).catch(() => {}); mediaLocal.delete(id); mediaOk.delete(id); mediaSaveOk();
+  if (mediaUrls.has(id)) { URL.revokeObjectURL(mediaUrls.get(id)); mediaUrls.delete(id); }
+}
+function mediaRemove(id) {   // borrar una foto: de acá y, si ya estaba en la nube, también de ahí
+  S.media = S.media.filter((m) => m.id !== id);
+  if (mediaOk.has(id)) lsSet("manuhq-mediadel", JSON.stringify([...mediaDelQ(), id]));
+  mediaDropLocal(id);
+  setTimeout(mediaTick, 300);
+}
+/* Si otro dispositivo borró fotos, acá también se van */
+function mediaAfterRemote(before) {
+  const now = new Set(S.media.map((m) => m.id));
+  before.filter((id) => !now.has(id)).forEach(mediaDropLocal);
+  mediaTick();
+}
+
+/* Mostrar: de IndexedDB a una URL temporal (blob) */
+const mediaUrls = new Map();
+async function mediaUrl(id) {
+  if (mediaUrls.has(id)) return mediaUrls.get(id);
+  const data = await idbGet(id).catch(() => null);
+  if (!data) return null;
+  const u = URL.createObjectURL(await (await fetch(data)).blob());
+  mediaUrls.set(id, u); return u;
+}
+async function hydrateMedia(root = document) {
+  const els = [...root.querySelectorAll("[data-mid]")];
+  const put = (el, u) => { if (el.tagName === "IMG") el.src = u; else el.href = u; };
+  els.forEach((el) => { const u = mediaUrls.get(el.dataset.mid); if (u) put(el, u); });   // las que ya están listas, enseguida
+  for (const el of els) { if (!el.isConnected || (el.tagName === "IMG" ? el.getAttribute("src") : el.getAttribute("href"))) continue; const u = await mediaUrl(el.dataset.mid); if (u && el.isConnected) put(el, u); }
+}
+
+/* Sincronización de las fotos con el segundo gist */
+async function mediaGistId() {
+  if (S.mediaGist) return S.mediaGist;
+  const g = await gh("/gists", { method: "POST", body: JSON.stringify({ description: "Manu HQ · fotos", public: false, files: { "LEEME.txt": { content: "Fotos de Manu HQ (sección Media). No borres este gist: acá se guardan las fotos para verlas en todos tus dispositivos." } } }) });
+  S.mediaGist = g.id; save();   // el id viaja a los demás dispositivos con la sincronización normal
+  return g.id;
+}
+async function mediaTick() {
+  if (mediaBusy || !mediaReady || !SYNC.token || !SYNC.gist) return;
+  mediaBusy = true;
+  try {
+    const up = S.media.filter((m) => mediaLocal.has(m.id) && !mediaOk.has(m.id)), del = mediaDelQ();
+    if (up.length || del.length) {
+      const gid = await mediaGistId();
+      for (const m of up) {
+        const data = await idbGet(m.id); if (!data) continue;
+        await gh("/gists/" + gid, { method: "PATCH", body: JSON.stringify({ files: { [`m-${m.id}.txt`]: { content: data } } }) });
+        mediaOk.add(m.id); mediaSaveOk(); mediaRefresh();
+      }
+      if (del.length) {
+        try { await gh("/gists/" + gid, { method: "PATCH", body: JSON.stringify({ files: Object.fromEntries(del.map((id) => [`m-${id}.txt`, null])) }) }); }
+        catch (e) { if (e.status !== 422) throw e; }   // 422: alguna ya no estaba; no hay nada más que borrar
+        lsSet("manuhq-mediadel", "[]");
+      }
+    }
+    if (S.mediaGist && SYNC.owner) {
+      for (const m of S.media.filter((x) => !mediaLocal.has(x.id))) {
+        const r = await fetch(`https://gist.githubusercontent.com/${SYNC.owner}/${S.mediaGist}/raw/m-${m.id}.txt`, { cache: "no-store" });
+        if (!r.ok) continue;   // todavía no la subió el otro dispositivo
+        const t = await r.text();
+        if (!/^data:image\//.test(t)) continue;
+        await idbPut(m.id, t); mediaLocal.add(m.id); mediaOk.add(m.id); mediaSaveOk(); mediaRefresh();
+      }
+    }
+    mediaFail = false;
+  } catch (e) { mediaFail = true; console.warn("fotos:", e); }
+  mediaBusy = false; mediaRefresh();
+}
+function mediaRefresh() {   // actualiza lo que se ve (sin pisar lo que estás escribiendo)
+  clearTimeout(mediaT);
+  mediaT = setTimeout(() => {
+    const st = $("#media-status"); if (st) st.innerHTML = mediaStatus();
+    if (route() === "media" && !document.activeElement?.matches("input, textarea")) render();
+  }, 350);
+}
+function mediaStatus() {
+  if (!SYNC.token) return `Las fotos se guardan en este dispositivo. Para verlas en los demás, <button class="linkbtn" type="button" data-act="open-sync">conectá la sincronización</button>.`;
+  const up = S.media.filter((m) => mediaLocal.has(m.id) && !mediaOk.has(m.id)).length, down = mediaReady ? S.media.filter((m) => !mediaLocal.has(m.id)).length : 0, n = (k) => `${k} foto${k === 1 ? "" : "s"}`;
+  if (mediaFail && (up || down)) return `Sin conexión con GitHub: ${up ? `faltan subir ${n(up)}` : `faltan bajar ${n(down)}`}. Se reintenta solo.`;
+  return up ? `☁ Subiendo ${n(up)}…` : down ? `☁ Bajando ${n(down)}…` : `☁ Todo sincronizado · ${n(S.media.length)}`;
+}
+function mediaInit() {
+  idbKeys().then((ks) => { ks.forEach((k) => mediaLocal.add(k)); mediaReady = true; if (route() === "media") render(); mediaTick(); }).catch(() => { mediaReady = true; });
+}
+function photoHTML(id) {
+  const m = S.media.find((x) => x.id === id);
+  if (!m) return `<p class="empty">Esa foto ya no está.</p>`;
+  return `<div class="mfull-wrap"><img class="mfull" data-mid="${id}" alt="Foto" /></div>
+    <div class="mfoot">
+      <span class="small muted">${esc(fmtDate(m.date))} · ${m.w}×${m.h} · ${m.kb} KB</span>
+      <div class="inline">
+        <input id="mtag-edit" list="media-tags" value="${esc(m.tag || "")}" placeholder="Etiqueta" maxlength="30" aria-label="Etiqueta" />
+        <button class="btn btn-sm" type="button" data-act="media-tag-save" data-id="${id}">Guardar etiqueta</button>
+        <a class="btn btn-sm" data-mid="${id}" download="foto-${esc(m.date)}.jpg">Descargar</a>
+        <button class="btn btn-sm btn-ghost" type="button" data-act="media-del" data-id="${id}">Borrar</button>
+      </div>
+    </div>`;
 }
 
 const VIEWS = {
@@ -1154,6 +1314,34 @@ const VIEWS = {
     </div>`;
   },
 
+  media() {
+    const tags = [...new Set(S.media.map((m) => m.tag).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
+    if (mediaTag && !tags.includes(mediaTag)) mediaTag = "";
+    const shown = S.media.filter((m) => !mediaTag || m.tag === mediaTag);
+    const chip = (id, label, n) => `<button class="chip ${mediaTag === id ? "on" : ""}" type="button" data-act="media-tag" data-t="${esc(id)}">${esc(label)}<span class="muted small mono">${n}</span></button>`;
+    const tile = (m) => {
+      const miss = mediaReady && !mediaLocal.has(m.id);
+      return `<button class="mimg ${miss ? "miss" : ""}" type="button" data-act="media-open" data-id="${m.id}" style="aspect-ratio:${m.w} / ${m.h}" aria-label="Abrir foto${m.tag ? ` (${esc(m.tag)})` : ""}"><img data-mid="${m.id}" alt="" />${miss ? `<span class="mwait">Bajando…</span>` : ""}${m.tag ? `<span class="mtag">${esc(m.tag)}</span>` : ""}</button>`;
+    };
+    return `
+    ${head("Media", "Tus fotos, todas juntas. Pegalas con Ctrl + V, arrastralas o elegilas: se guardan y se sincronizan.")}
+    <div class="bento"><div class="card c-12">
+      <div class="mdrop" id="mdrop">
+        <b>Pegá tus fotos acá</b>
+        <span class="muted">Copiá una imagen y apretá <kbd>Ctrl</kbd> + <kbd>V</kbd> · o arrastrala hasta acá · o</span>
+        <button class="btn btn-primary" type="button" data-act="media-pick">Elegir fotos</button>
+        <input id="media-file" type="file" accept="image/*" multiple hidden />
+      </div>
+      <div class="mrow">
+        <input id="media-tag" list="media-tags" value="${esc(mediaTag)}" placeholder="Etiqueta para las que agregues (opcional): Inspiración, Eventos…" maxlength="30" aria-label="Etiqueta para las fotos nuevas" />
+        <datalist id="media-tags">${tags.map((t) => `<option value="${esc(t)}"></option>`).join("")}</datalist>
+      </div>
+      <p class="small muted" id="media-status" style="margin:10px 0 0">${mediaStatus()}</p>
+    </div></div>
+    ${S.media.length ? `<div class="filters" style="margin:4px 0 16px">${chip("", "Todas", S.media.length)}${tags.map((t) => chip(t, t, S.media.filter((m) => m.tag === t).length)).join("")}</div>` : ""}
+    ${shown.length ? `<div class="mgrid">${shown.map(tile).join("")}</div>` : `<div class="card"><p class="empty">${S.media.length ? "No hay fotos con esa etiqueta." : "Todavía no hay fotos. Copiá una imagen (una captura, una foto del celular) y pegala acá con Ctrl + V."}</p></div>`}`;
+  },
+
   habitos() {
     const hd = habitDay || today(), isNow = hd === today(), todayD = today(), hs = habitList();
     const dowOf = (d) => new Date(d + "T12:00:00").getDay();
@@ -1496,6 +1684,7 @@ function render() {
   document.title = route() === "inicio" ? "Manu HQ" : `${routeLabel(route())} · Manu HQ`;
   refreshPop();
   if (route() === "pinterest") buildPins();
+  if (route() === "media") hydrateMedia($("#view"));
 }
 window.addEventListener("hashchange", () => {
   if (route() === "rutina" && !render.keepDay) { selDay = new Date().getDay(); weekOff = 0; }
@@ -1589,6 +1778,12 @@ function act(el) {
     case "j-cancel": jEdit = null; render(); return;
     case "j-save": { const t = ($("#j-edit-text")?.value || "").trim(); if (!t) return; const e = byId(S.journal); if (e) { e.text = t; e.edited = today(); } jEdit = null; break; }
     case "del-journal": if (!confirm("¿Borrar esta entrada del diario?")) return; S.journal = drop(S.journal); break;
+    case "media-pick": $("#media-file")?.click(); return;
+    case "media-tag": mediaTag = el.dataset.t; render(); return;
+    case "media-open": if (el.dataset.id) openPop("Foto", () => photoHTML(el.dataset.id), "wide"); return;
+    case "media-tag-save": { const m = byId(S.media); if (m) { m.tag = ($("#mtag-edit")?.value || "").trim().slice(0, 30); toast("Etiqueta guardada ✓"); } break; }
+    case "media-del": if (!confirm("¿Borrar esta foto? También se borra de la nube y de tus otros dispositivos.")) return; mediaRemove(id); $("#pop").close(); break;
+    case "open-sync": $("#sync-btn").click(); return;
     case "del-pin": S.pins = drop(S.pins); break;
     case "pin-tag": pinTag = el.dataset.t; render(); return;
     case "plan-warn": openPop("Plan-73 cambió", planWarnHTML); return;
@@ -1687,6 +1882,19 @@ document.addEventListener("input", (e) => {
   }
 });
 
+/* Media: pegar (Ctrl + V), arrastrar y elegir fotos */
+document.addEventListener("paste", (e) => {
+  if (route() !== "media") return;
+  const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
+  if (!files.length) return;   // si lo que pegás es texto, se pega normal
+  e.preventDefault(); mediaAdd(files);
+});
+const dragHasFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+document.addEventListener("dragover", (e) => { if (route() === "media" && dragHasFiles(e)) { e.preventDefault(); $("#mdrop")?.classList.add("over"); } });
+document.addEventListener("dragleave", (e) => { if (!e.relatedTarget || e.target === $("#mdrop")) $("#mdrop")?.classList.remove("over"); });
+document.addEventListener("drop", (e) => { if (route() === "media" && dragHasFiles(e)) { e.preventDefault(); $("#mdrop")?.classList.remove("over"); mediaAdd(e.dataTransfer.files); } });
+document.addEventListener("change", (e) => { if (e.target.id === "media-file") { mediaAdd(e.target.files); e.target.value = ""; } });
+
 /* Diario: Ctrl + Enter guarda */
 document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && e.target.matches?.("form[data-form=journal] textarea")) { e.preventDefault(); e.target.form.requestSubmit(); }
@@ -1749,7 +1957,9 @@ async function gh(path, opt = {}) {
 }
 const syncFail = (e) => setSync([401, 403, 404].includes(e.status) ? "auth" : "err");
 async function remoteRead() {
-  const f = (await gh("/gists/" + SYNC.gist)).files[SYNC_FILE];
+  const g = await gh("/gists/" + SYNC.gist);
+  if (g.owner?.login && SYNC.owner !== g.owner.login) { SYNC.owner = g.owner.login; saveSync(); }   // hace falta para bajar las fotos
+  const f = g.files[SYNC_FILE];
   if (!f) return null;
   const data = JSON.parse(f.truncated ? await (await fetch(f.raw_url, { cache: "no-store" })).text() : f.content);
   return data && typeof data === "object" ? data : null;
@@ -1782,11 +1992,13 @@ function mergeAny(b, l, r) {
   return sameJ(l, b) ? r : l;
 }
 function applyRemote(data, keepBase) {
+  const mediaBefore = S.media.map((m) => m.id);
   S = normalize(data);
   lsSet(STORE_KEY, JSON.stringify(S)); if (!keepBase) setBase();
   const a = document.activeElement;   // si estás escribiendo, no te borro el campo: se redibuja con tu próximo cambio
   if (!(a && a.closest("#view") && /INPUT|TEXTAREA/.test(a.tagName) && a.value)) render();
   renderMusic(); renderSc();
+  mediaAfterRemote(mediaBefore);
 }
 async function syncPush() {
   clearTimeout(pushT); pushT = null;
@@ -1825,6 +2037,7 @@ async function syncNow() {
     else await syncPush();
   } catch (e) { syncFail(e); }
   syncBusy = false;
+  mediaTick();   // después de sincronizar los datos: subir y bajar fotos
   if (syncNow.again) { syncNow.again = false; schedulePush(); }
 }
 const hasLocalData = () => {   // los nombres y portadas de música se completan solos: no cuentan como datos tuyos
@@ -1847,7 +2060,7 @@ async function syncConnect(token) {
       const g = await gh("/gists", { method: "POST", body: JSON.stringify({ description: "Manu HQ · datos sincronizados", public: false, files: { [SYNC_FILE]: { content: JSON.stringify(S) } } }) });
       SYNC.gist = g.id; setBase(); setSync("ok");
     }
-    saveSync(); toast("Dispositivo conectado ✓");
+    saveSync(); toast("Dispositivo conectado ✓"); mediaTick();
     return true;
   } catch (e) {
     SYNC = {}; setSync("off");
@@ -2245,3 +2458,4 @@ updateSplash();
 render();
 loadPlan73();
 initMusic();
+mediaInit();
