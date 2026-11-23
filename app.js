@@ -1200,7 +1200,8 @@ const VIEWS = {
       <div class="kpi"><span class="label-sm">Categoría</span><div class="v">−${G.weight}<small>kg</small></div><div class="d">peso de competencia</div></div>
     </div>
     <div class="bento">
-      <div class="card c-8">
+      <div class="c-8 stack">
+      <div class="card">
         <div class="card-head"><h2>Evolución del peso</h2></div>
         ${weightChart()}
         <form class="form-grid" data-form="weight" style="margin-top:14px">
@@ -1210,21 +1211,19 @@ const VIEWS = {
           <div class="field" style="align-self:end"><button class="btn btn-primary">Agregar pesaje</button></div>
         </form>
       </div>
-      <div class="c-4 side stack">
-        ${N?.daily?.length ? `<div class="card"><div class="card-head"><h2>Números diarios</h2><span class="sub">Plan-73</span></div>
-          <ul class="mini-rows">${N.daily.map((r) => `<li><span class="lbl">${esc(r[0].join(" "))}</span><span class="val">${esc((r[1] || []).join(" "))}</span></li>`).join("")}</ul></div>` : ""}
-        ${N?.control ? `<div class="card"><div class="card-head"><h2>Control de peso</h2></div><div class="plan-html" style="margin:0">${N.control}</div></div>` : ""}
-        ${tasksCard("fisico")}
-        ${notesCard("fisico")}
-      </div>
-    </div>
-    <div class="bento">
-      <div class="card c-12">
+      <div class="card">
         <div class="card-head"><h2>Pesajes</h2><span class="sub">${pts.length}</span></div>
         <p class="small muted" style="margin:-6px 0 10px">Tus pesajes se anotan acá. Las metas salen solas de Plan-73: si las cambiás allá, cambian acá.</p>
         <div class="table-wrap"><table><thead><tr><th>Fecha</th><th class="num">Kg</th><th>Nota</th><th></th></tr></thead><tbody>
           ${pts.map((p) => `<tr><td>${fmtDate(p.date)}</td><td class="num">${esc(p.kg)}</td><td>${esc(p.note)}</td><td><button class="del" data-act="del-weight" data-id="${p.id}">✕</button></td></tr>`).join("") || `<tr><td colspan="4" class="empty">Sin pesajes.</td></tr>`}
         </tbody></table></div>
+      </div>
+      </div>      <div class="c-4 side stack">
+        ${N?.daily?.length ? `<div class="card"><div class="card-head"><h2>Números diarios</h2><span class="sub">Plan-73</span></div>
+          <ul class="mini-rows">${N.daily.map((r) => `<li><span class="lbl">${esc(r[0].join(" "))}</span><span class="val">${esc((r[1] || []).join(" "))}</span></li>`).join("")}</ul></div>` : ""}
+        ${N?.control ? `<div class="card"><div class="card-head"><h2>Control de peso</h2></div><div class="plan-html" style="margin:0">${N.control}</div></div>` : ""}
+        ${tasksCard("fisico")}
+        ${notesCard("fisico")}
       </div>
     </div>
     ${ST?.rows?.length ? `<div class="bento"><div class="card c-12">
