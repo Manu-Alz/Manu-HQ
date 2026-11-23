@@ -1085,7 +1085,8 @@ const VIEWS = {
         <div class="card-head"><h2>Estudio</h2><a href="#estudio" class="sub">ver</a></div>
         <ul class="list">${study.map((s) => `<li><span class="grow"><b style="font-weight:500">${esc(s.subject)}</b> · ${esc(s.text)}</span><span class="small muted">${fmtDate(s.due)}</span></li>`).join("") || `<li class="empty">Nada pendiente.</li>`}</ul>
       </div>
-    </div>`;
+    </div>
+    <p class="getout"><b>Get out there.</b><span>El propósito del conocimiento es la acción, no el conocimiento.</span></p>`;
   },
 
   rutina() {
