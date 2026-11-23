@@ -54,6 +54,7 @@ const ICONS = {
   judo: "M3 9h18v4H3zM10 13l-2.5 8M14 13l2.5 8M12 3v6",
   fisico: "M3 3v18h18M7 15l4-4 3 3 5-6",
   surf: "M2 8c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 13c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 18c2-2 4-2 6 0s4 2 6 0 4-2 6 0",
+  solin: "M23 7l-7 5 7 5zM3 5h13a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z",
   lectura: "M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2zM22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z",
   media: "M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM21 15l-5-5L5 21",
   pinterest: "M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zM12 11.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z",
@@ -73,7 +74,7 @@ const NAV = [
   { group: null, items: [["inicio", "Inicio"]] },
   { group: "Cuerpo", items: [["rutina", "Rutina / Gym"], ["comida", "Comida"], ["judo", "Judo"], ["fisico", "Cambio físico"], ["surf", "Surf"]] },
   { group: "Vida", items: [["calendario", "Calendario"], ["habitos", "Hábitos"], ["diario", "Diario"], ["estudio", "Estudio"], ["idiomas", "Idiomas"], ["lectura", "Lectura"], ["compras", "Compras"], ["watch", "Watch list"]] },
-  { group: "Trabajo", items: [["proyectos", "Proyectos"], ["contenido", "Contenido"], ["ideas", "Ideas"], ["pinterest", "Pinterest"], ["media", "Media"]] },
+  { group: "Trabajo", items: [["proyectos", "Proyectos"], ["contenido", "Contenido"], ["solin", "Solinvitto"], ["ideas", "Ideas"], ["pinterest", "Pinterest"], ["media", "Media"]] },
 ];
 
 /* ---------- Estado ---------- */
@@ -111,6 +112,7 @@ const DEFAULT_STATE = {
   mediaGist: "",               // id del gist donde se guardan las fotos
   books: [],                   // lectura: { id, title, author, pages, page, status: "want" | "reading" | "done", rating, notes, cover, added, started, finished }
   readDays: [],                // días en que leí (para la racha)
+  solin: [],                   // Solinvitto: { id, title, plat, stage 0-4, hook, script, link, date, notes }
   readGoal: 12,                // meta de libros del año
 };
 
@@ -132,7 +134,7 @@ function normalize(data) {
   const s = { ...structuredClone(DEFAULT_STATE), ...data };
   s.logs = { ...DEFAULT_STATE.logs, ...s.logs };
   for (const k of ["waza", "notes", "habits"]) s[k] = s[k] || {};
-  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "langs", "buy", "watch", "music", "sc", "journal", "pins", "media", "books", "readDays"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
+  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "langs", "buy", "watch", "music", "sc", "journal", "pins", "media", "books", "readDays", "solin"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
   // Las notas libres viejas de Uruguay pasan a la lista de notas (una sola vez)
   if (s.uyNotes) { (s.notes.uruguay = s.notes.uruguay || []).unshift({ id: uid(), text: s.uyNotes, date: today() }); }
   // "Estilo de vida" se reemplazó por Hábitos: sus lugares y notas pasan a Ideas, una sola vez.
@@ -983,6 +985,42 @@ function bookPopHTML(id) {
     <div class="bk-actions"><button class="btn btn-primary" type="button" data-act="book-save" data-id="${id}">Guardar</button><button class="btn btn-ghost" type="button" data-act="book-del" data-id="${id}">Borrar libro</button></div>`;
 }
 
+/* ---------- Solinvitto: ideas y videos para las redes ---------- */
+const SOL_STAGES = ["Idea", "Guion", "Grabado", "Editado", "Publicado"];
+const SOL_PLATS = ["TikTok", "Instagram", "YouTube", "Otra"];
+const solF = { st: "todos", plat: "todos" };
+function solReadFields(v) {   // pasa lo que escribiste en el popup al video
+  const g = (id) => $("#pop " + id);
+  if (!g("#sv-title")) return;
+  v.title = g("#sv-title").value.trim() || v.title;
+  v.plat = g("#sv-plat").value;
+  v.hook = g("#sv-hook").value.trim();
+  v.script = g("#sv-script").value;
+  v.link = g("#sv-link").value.trim();
+  v.date = g("#sv-date").value;
+  v.notes = g("#sv-notes").value;
+}
+function solPopHTML(id) {
+  const v = S.solin.find((x) => x.id === id);
+  if (!v) return `<p class="empty">Ese video ya no está.</p>`;
+  return `<input id="sv-title" value="${esc(v.title)}" aria-label="Título" style="font-size:18px;font-weight:600" />
+    <h4>Etapa</h4>
+    <div class="filters" style="margin:0">${SOL_STAGES.map((s, i) => `<button class="chip ${v.stage === i ? "on" : ""}" type="button" data-act="solin-stage" data-id="${id}" data-n="${i}">${s}</button>`).join("")}</div>
+    <div class="bk-prog" style="margin-top:14px">
+      <label><span class="small muted">Dónde se sube</span><select id="sv-plat">${SOL_PLATS.map((p) => `<option ${p === v.plat ? "selected" : ""}>${p}</option>`).join("")}</select></label>
+      <label><span class="small muted">Fecha (para grabar o publicar)</span><input id="sv-date" type="date" value="${esc(v.date || "")}" /></label>
+    </div>
+    <h4>Gancho (la primera frase)</h4>
+    <input id="sv-hook" value="${esc(v.hook || "")}" placeholder="Lo que dice o muestra en los primeros 3 segundos" aria-label="Gancho" />
+    <h4>Guion</h4>
+    <textarea id="sv-script" rows="7" placeholder="Qué pasa en el video, escena por escena…" aria-label="Guion">${esc(v.script || "")}</textarea>
+    <h4>Link del video publicado</h4>
+    <input id="sv-link" type="url" value="${esc(v.link || "")}" placeholder="https://…" aria-label="Link" />
+    ${v.link ? `<p class="small" style="margin:6px 0 0"><a href="${esc(v.link)}" target="_blank" rel="noopener">Abrir el video ↗</a></p>` : ""}
+    <h4>Notas</h4>
+    <textarea id="sv-notes" rows="3" placeholder="Música, referencias, ideas para el próximo…" aria-label="Notas">${esc(v.notes || "")}</textarea>
+    <div class="bk-actions"><button class="btn btn-primary" type="button" data-act="solin-save" data-id="${id}">Guardar</button><button class="btn btn-ghost" type="button" data-act="solin-del" data-id="${id}">Borrar video</button></div>`;
+}
 const VIEWS = {
   inicio() {
     const d = ROUTINE[new Date().getDay()];
@@ -1567,6 +1605,33 @@ const VIEWS = {
     </div>`;
   },
 
+  solin() {
+    const all = S.solin, list = all.filter((v) => (solF.st === "todos" || v.stage === +solF.st) && (solF.plat === "todos" || v.plat === solF.plat));
+    const sorted = [...list].sort((a, b) => a.stage - b.stage || (a.date || "9").localeCompare(b.date || "9"));
+    const n = (i) => all.filter((v) => v.stage === i).length;
+    const chip = (k, label, c) => `<button class="chip ${String(solF.st) === String(k) ? "on" : ""}" data-act="solin-f" data-st="${k}">${label}${c != null ? ` <span class="muted">${c}</span>` : ""}</button>`;
+    const next = all.filter((v) => v.stage < 4 && v.date).sort((a, b) => a.date.localeCompare(b.date))[0];
+    return `
+    ${head("Solinvitto", "Ideas y videos para las redes: de la idea a publicado.")}
+    <div class="card" style="margin-bottom:16px">
+      <form class="inline" data-form="solin">
+        <input name="title" placeholder="Idea de video…" required />
+        <select name="plat" class="opt" style="flex:0 1 150px">${SOL_PLATS.map((p) => `<option>${p}</option>`).join("")}</select>
+        <button class="btn btn-primary">Agregar</button>
+      </form>
+      <p class="small muted" style="margin:10px 0 0">${all.length ? `${n(4)} publicados · ${all.length - n(4)} en camino${next ? ` · próximo: ${fmtDate(next.date)}` : ""}` : "Escribí la idea y listo. Después la abrís para sumarle gancho, guion y link."}</p>
+    </div>
+    <div class="filters" style="margin-bottom:14px">
+      ${chip("todos", "Todos", all.length)}${SOL_STAGES.map((s, i) => chip(i, s, n(i))).join("")}
+      <select data-act="solin-plat" aria-label="Plataforma"><option value="todos">Todas las plataformas</option>${SOL_PLATS.map((p) => `<option ${solF.plat === p ? "selected" : ""}>${p}</option>`).join("")}</select>
+    </div>
+    ${sorted.length ? `<div class="bgrid">${sorted.map((v) => `<button class="book vcard" type="button" data-act="solin-open" data-id="${v.id}">
+      <span class="binfo"><span class="vmeta"><span class="vst s${v.stage}">${SOL_STAGES[v.stage]}</span><span class="small muted">${esc(v.plat)}${v.date ? " · " + fmtDate(v.date) : ""}</span></span>
+      <b>${esc(v.title)}</b>${v.hook ? `<span class="muted small">“${esc(v.hook)}”</span>` : ""}</span></button>`).join("")}</div>`
+      : `<div class="card"><p class="empty" style="margin:0">${all.length ? "No hay videos con ese filtro." : "Todavía no hay videos. Agregá la primera idea arriba."}</p></div>`}
+    <div class="bento" style="margin-top:16px">${notesCard("solin", "Notas de Solinvitto", "c-12")}</div>`;
+  },
+
   contenido() {
     return `
     ${head("Contenido", "Videos y posts: judo, cambio físico, estiramientos, surf y Uruguay.")}
@@ -1835,6 +1900,7 @@ function cmdkItems(q) {
     { k: "Acción", label: "Ver el calendario de entreno y marcar días", hint: "Gym", run: () => act({ dataset: { act: "open-cal" } }) },
     { k: "Acción", label: "Escribir en el diario", hint: "Diario", go: "diario", focus: "form[data-form=journal] textarea" },
     { k: "Acción", label: "Anotar una idea", hint: "Ideas", run: () => $("#quick-idea input").focus() },
+    { k: "Acción", label: "Anotar una idea de video", hint: "Solinvitto", go: "solin", focus: "form[data-form=solin] input" },
     { k: "Acción", label: "Agregar un libro", hint: "Lectura", go: "lectura", focus: "#book-q" },
     { k: "Acción", label: "Pegar una foto", hint: "Media", go: "media" },
     { k: "Acción", label: "Abrir Spotify", hint: "Música", run: () => $("#mini-open").click() },
@@ -1845,7 +1911,7 @@ function cmdkItems(q) {
   if (t.length >= 2) {   // también busca en lo que escribiste
     [["Tarea", S.tasks, (x) => x.text, "inicio"], ["Idea", S.ideas, (x) => x.text, "ideas"], ["Diario", S.journal, (x) => x.text, "diario"],
       ["Compra", S.buy, (x) => x.text, "compras"], ["Para ver", S.watch, (x) => x.text, "watch"], ["Estudio", S.study, (x) => `${x.subject} ${x.text}`, "estudio"],
-      ["Proyecto", S.projects, (x) => x.name, "proyectos"], ["Libro", S.books || [], (x) => `${x.title} ${x.author || ""}`, "lectura"]]
+      ["Proyecto", S.projects, (x) => x.name, "proyectos"], ["Libro", S.books || [], (x) => `${x.title} ${x.author || ""}`, "lectura"], ["Video", S.solin || [], (x) => `${x.title} ${x.hook || ""}`, "solin"]]
       .forEach(([k, arr, f, go]) => arr.filter((x) => hit(f(x))).slice(0, 4).forEach((x) => items.push({ k, label: String(f(x)).replace(/\s+/g, " ").trim().slice(0, 80), hint: "", go })));
   }
   return items.slice(0, 40);
@@ -1947,6 +2013,7 @@ document.addEventListener("submit", (e) => {
     case "lang-res": langById(f.dataset.id).res.push({ id: uid(), text: v.text }); break;
     case "vocab": langById(f.dataset.id).vocab.unshift({ id: uid(), w: v.w, m: v.m }); break;
     case "note": (S.notes[f.dataset.key] = S.notes[f.dataset.key] || []).unshift({ id: uid(), text: v.text, date: today() }); break;
+    case "solin": S.solin.unshift({ id: uid(), title: v.title.trim(), plat: v.plat || "TikTok", stage: 0, hook: "", script: "", link: "", date: "", notes: "" }); break;
     case "content": S.content.push({ id: uid(), title: v.title, cat: v.cat, stage: 0 }); break;
     case "project": S.projects.push({ id: uid(), status: "Activo", tasks: [], ...v }); break;
     case "ptask": S.projects.find((p) => p.id === f.dataset.pid).tasks.push({ id: uid(), text: v.text, done: false }); break;
@@ -2016,6 +2083,12 @@ function act(el) {
       toast(finished ? "¡Terminaste el libro! Pasó a tus leídos ✓" : "Guardado ✓"); $("#pop").close(); break;
     }
     case "book-del": if (!confirm("¿Borrar este libro de tu lista?")) return; S.books = drop(S.books); $("#pop").close(); break;
+    case "solin-f": solF.st = el.dataset.st; break;
+    case "solin-plat": solF.plat = el.value; break;
+    case "solin-open": if (el.dataset.id) openPop("Video", () => solPopHTML(el.dataset.id), "wide"); return;
+    case "solin-stage": { const v = byId(S.solin); if (!v) return; solReadFields(v); v.stage = +el.dataset.n; break; }
+    case "solin-save": { const v = byId(S.solin); if (!v) return; solReadFields(v); toast("Guardado ✓"); $("#pop").close(); break; }
+    case "solin-del": if (!confirm("¿Borrar este video?")) return; S.solin = drop(S.solin); $("#pop").close(); break;
     case "open-menu": $("#sidebar").classList.toggle("open"); return;
     case "plan-warn": openPop("Plan-73 cambió", planWarnHTML); return;
     case "week-nav": { const dir = +el.dataset.dir; weekOff = dir === 0 ? 0 : Math.min(0, weekOff + dir); render(); return; }

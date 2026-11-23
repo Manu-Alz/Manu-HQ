@@ -1220,3 +1220,13 @@ form.inline input[type=date] { flex: 0 1 150px; }
   details.notes-card > .nc-body { padding: 14px 18px 18px; }
   .summary { padding: 4px 18px; }
 }
+
+/* Solinvitto */
+.vcard { flex-direction: column; align-items: stretch; gap: 0; }
+.vcard .binfo { gap: 8px; }
+.vmeta { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.vst { font: 600 11.5px var(--font); padding: 3px 9px; border-radius: 999px; background: var(--card-3); color: var(--muted); }
+.vst.s1 { background: rgba(167,139,255,.14); color: var(--violet); }
+.vst.s2 { background: rgba(255,196,107,.14); color: var(--amber); }
+.vst.s3 { background: rgba(90,169,255,.14); color: var(--blue); }
+.vst.s4 { background: rgba(94,224,160,.14); color: var(--green); }
