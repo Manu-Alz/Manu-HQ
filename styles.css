@@ -1245,3 +1245,13 @@ form.inline input[type=date] { flex: 0 1 150px; }
   nav a { padding-top: 6px; padding-bottom: 6px; }
   .nav-group { padding: 12px 12px 4px; }
 }
+
+/* Repos */
+.repos-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.repo { display: grid; gap: 10px; align-content: start; }
+.repo-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.repo-name { font: 700 17px var(--display); color: var(--text); letter-spacing: -.01em; overflow-wrap: anywhere; }
+.repo-name:hover { color: var(--accent); text-decoration: none; }
+.repo-meta { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+.repo-meta .ldot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.repo-act { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }

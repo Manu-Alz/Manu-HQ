@@ -65,6 +65,7 @@ const ICONS = {
   fisico: "M3 3v18h18M7 15l4-4 3 3 5-6",
   surf: "M2 8c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 13c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 18c2-2 4-2 6 0s4 2 6 0 4-2 6 0",
   solin: "M23 7l-7 5 7 5zM3 5h13a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z",
+  repos: "M9 19c-5 1.5-5-2.5-7-3m14 6v-3.9a3.4 3.4 0 0 0-1-2.6c3.1-.3 6.4-1.5 6.4-7a5.4 5.4 0 0 0-1.5-3.8 5 5 0 0 0-.1-3.7s-1.2-.4-3.9 1.4a13.4 13.4 0 0 0-7 0C6.3 2.5 5.1 2.9 5.1 2.9a5 5 0 0 0-.1 3.7A5.4 5.4 0 0 0 3.5 10.4c0 5.5 3.3 6.7 6.4 7a3.4 3.4 0 0 0-1 2.6V22",
   lectura: "M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2zM22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z",
   media: "M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM21 15l-5-5L5 21",
   pinterest: "M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zM12 11.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z",
@@ -85,7 +86,7 @@ const NAV = [
   { group: "Cuerpo", items: [["rutina", "Gym"], ["judo", "Judo"], ["surf", "Surf"], ["comida", "Comida"], ["fisico", "Cambio físico"]] },
   { group: "Día a día", items: [["calendario", "Calendario"], ["habitos", "Hábitos"], ["compras", "Compras"], ["diario", "Diario"]] },
   { group: "Aprender", items: [["estudio", "Estudio"], ["idiomas", "Idiomas"], ["lectura", "Lectura"]] },
-  { group: "Crear", items: [["solin", "Solinvitto"], ["contenido", "Contenido"], ["proyectos", "Proyectos"], ["ideas", "Ideas"]] },
+  { group: "Crear", items: [["solin", "Solinvitto"], ["contenido", "Contenido"], ["proyectos", "Proyectos"], ["repos", "Repos"], ["ideas", "Ideas"]] },
   { group: "Guardados", items: [["pinterest", "Pinterest"], ["media", "Fotos"], ["watch", "Para ver"]] },
 ];
 
@@ -125,6 +126,7 @@ const DEFAULT_STATE = {
   books: [],                   // lectura: { id, title, author, pages, page, status: "want" | "reading" | "done", rating, notes, cover, added, started, finished }
   readDays: [],                // días en que leí (para la racha)
   solin: [],                   // Solinvitto: { id, title, plat, stage 0-4, hook, script, link, date, notes }
+  repoHide: ["Pagina-de-Marcos"],   // repos de GitHub que no quiero ver (por nombre)
   readGoal: 12,                // meta de libros del año
 };
 
@@ -146,7 +148,7 @@ function normalize(data) {
   const s = { ...structuredClone(DEFAULT_STATE), ...data };
   s.logs = { ...DEFAULT_STATE.logs, ...s.logs };
   for (const k of ["waza", "notes", "habits"]) s[k] = s[k] || {};
-  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "langs", "buy", "watch", "music", "sc", "journal", "pins", "media", "books", "readDays", "solin"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
+  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "langs", "buy", "watch", "music", "sc", "journal", "pins", "media", "books", "readDays", "solin", "repoHide"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
   // Las notas libres viejas de Uruguay pasan a la lista de notas (una sola vez)
   if (s.uyNotes) { (s.notes.uruguay = s.notes.uruguay || []).unshift({ id: uid(), text: s.uyNotes, date: today() }); }
   // "Estilo de vida" se reemplazó por Hábitos: sus lugares y notas pasan a Ideas, una sola vez.
@@ -1033,6 +1035,30 @@ function solPopHTML(id) {
     <textarea id="sv-notes" rows="3" placeholder="Música, referencias, ideas para el próximo…" aria-label="Notas">${esc(v.notes || "")}</textarea>
     <div class="bk-actions"><button class="btn btn-primary" type="button" data-act="solin-save" data-id="${id}">Guardar</button><button class="btn btn-ghost" type="button" data-act="solin-del" data-id="${id}">Borrar video</button></div>`;
 }
+/* ---------- Repos de GitHub (públicos, se leen de la API sin token) ---------- */
+const GH_USER = "Manu-Alz", GH_CACHE = "manuhq-repos";
+const repos = { list: null, busy: false, err: false, tried: false, showHidden: false };
+const LANG_COLOR = { JavaScript: "#f1e05a", HTML: "#e34c26", CSS: "#9575cd", TypeScript: "#3178c6", Python: "#3572a5", Shell: "#89e051" };
+function ago(iso) {
+  const m = Math.max(0, Math.round((Date.now() - new Date(iso)) / 6e4));
+  if (m < 2) return "recién"; if (m < 60) return `hace ${m} min`;
+  const h = Math.round(m / 60); if (h < 24) return `hace ${h} ${h === 1 ? "hora" : "horas"}`;
+  const d = Math.round(h / 24); if (d === 1) return "ayer"; if (d < 30) return `hace ${d} días`;
+  const mo = Math.round(d / 30); return mo < 12 ? `hace ${mo} ${mo === 1 ? "mes" : "meses"}` : `hace más de un año`;
+}
+async function loadRepos(force) {
+  repos.tried = true;
+  try { const c = JSON.parse(localStorage.getItem(GH_CACHE) || "null"); if (c && Array.isArray(c.list)) { repos.list = c.list; if (!force && Date.now() - c.t < 10 * 6e4) return; } } catch (e) {}
+  repos.busy = true; repos.err = false;
+  try {
+    const r = await fetch(`https://api.github.com/users/${GH_USER}/repos?per_page=100&sort=pushed`);
+    if (!r.ok) throw new Error(r.status);
+    repos.list = (await r.json()).map((x) => ({ name: x.name, desc: x.description || "", lang: x.language || "", stars: x.stargazers_count, pushed: x.pushed_at, url: x.html_url, pages: !!x.has_pages, home: x.homepage || "", fork: x.fork, archived: x.archived }));
+    try { localStorage.setItem(GH_CACHE, JSON.stringify({ t: Date.now(), list: repos.list })); } catch (e) {}
+  } catch (e) { repos.err = true; }
+  repos.busy = false;
+  if (route() === "repos") render();
+}
 const VIEWS = {
   inicio() {
     const d = ROUTINE[new Date().getDay()];
@@ -1644,6 +1670,29 @@ const VIEWS = {
     <div class="bento" style="margin-top:16px">${notesCard("solin", "Notas de Solinvitto", "c-12")}</div>`;
   },
 
+  repos() {
+    if (!repos.tried) loadRepos();
+    const hide = new Set(S.repoHide), all = (repos.list || []).sort((a, b) => b.pushed.localeCompare(a.pushed));
+    const shown = all.filter((r) => !hide.has(r.name)), hidden = all.filter((r) => hide.has(r.name));
+    const site = (r) => r.home || (r.pages ? `https://${GH_USER.toLowerCase()}.github.io/${r.name}/` : "");
+    const card = (r, isHidden) => `<div class="card repo">
+      <div class="repo-top"><a class="repo-name" href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.name)}</a>${r.archived ? `<span class="tag">Archivado</span>` : ""}${r.fork ? `<span class="tag">Fork</span>` : ""}</div>
+      ${r.desc ? `<p class="muted" style="margin:0">${esc(r.desc)}</p>` : ""}
+      <div class="repo-meta small muted">${r.lang ? `<span><i class="ldot" style="background:${LANG_COLOR[r.lang] || "var(--muted)"}"></i>${esc(r.lang)}</span>` : ""}${r.stars ? `<span>★ ${r.stars}</span>` : ""}<span>${ago(r.pushed)}</span></div>
+      <div class="repo-act">
+        <a class="btn btn-sm" href="${esc(r.url)}" target="_blank" rel="noopener">Código ↗</a>
+        ${site(r) ? `<a class="btn btn-sm" href="${esc(site(r))}" target="_blank" rel="noopener">Sitio ↗</a>` : ""}
+        <button class="btn btn-sm btn-ghost" type="button" data-act="${isHidden ? "repo-show" : "repo-hide"}" data-name="${esc(r.name)}">${isHidden ? "Mostrar" : "Ocultar"}</button>
+      </div></div>`;
+    return `
+    ${head("Repos", "Mis repositorios de GitHub, del más reciente al más viejo.", `<button class="btn btn-sm" type="button" data-act="repo-reload" ${repos.busy ? "disabled" : ""}>${repos.busy ? "Actualizando…" : "Actualizar"}</button><a class="btn btn-sm" href="https://github.com/${GH_USER}?tab=repositories" target="_blank" rel="noopener">Ver en GitHub ↗</a>`)}
+    ${repos.err ? `<div class="card" style="margin-bottom:16px"><p style="margin:0">No pude leer GitHub ${repos.list ? "(te muestro lo último que guardé)" : "(¿sin conexión?)"}. Probá de nuevo en un rato.</p></div>` : ""}
+    ${!repos.list && repos.busy ? `<div class="card"><p class="empty" style="margin:0">Buscando tus repos…</p></div>` : ""}
+    ${repos.list ? `<div class="bgrid repos-grid">${shown.map((r) => card(r, false)).join("") || `<div class="card"><p class="empty" style="margin:0">No hay repos para mostrar.</p></div>`}</div>` : ""}
+    ${hidden.length ? `<details class="more" style="margin-top:18px" ${repos.showHidden ? "open" : ""} data-rh><summary>Ocultos (${hidden.length})</summary><div class="bgrid repos-grid" style="margin-top:12px">${hidden.map((r) => card(r, true)).join("")}</div></details>` : ""}
+    <p class="small muted" style="margin-top:16px">Se ven los repos públicos. Los ocultos no se borran, solo dejan de aparecer acá.</p>`;
+  },
+
   contenido() {
     return `
     ${head("Contenido", "Videos y posts: judo, cambio físico, estiramientos, surf y Uruguay.")}
@@ -1970,7 +2019,7 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === "/" && !typing && !e.ctrlKey && !e.metaKey && !e.altKey && entered) { e.preventDefault(); openCmdk(); }
 });
 
-const UNDOABLE = /^(del-task|del-check|del-weight|del-study|del-idea|del-content|del-note|del-ptask|del-vocab|del-lang-res|del-pin|clear-bought|clear-watched)$/;
+const UNDOABLE = /^(del-task|del-check|del-weight|del-study|del-idea|del-content|del-note|del-ptask|del-vocab|del-lang-res|del-pin|repo-hide|clear-bought|clear-watched)$/;
 window.addEventListener("hashchange", () => {
   if (route() === "rutina" && !render.keepDay) { selDay = new Date().getDay(); weekOff = 0; }
   if (route() === "calendario") { calMonth = null; calSel = null; }
@@ -2102,6 +2151,9 @@ function act(el) {
     case "solin-stage": { const v = byId(S.solin); if (!v) return; solReadFields(v); v.stage = +el.dataset.n; break; }
     case "solin-save": { const v = byId(S.solin); if (!v) return; solReadFields(v); toast("Guardado ✓"); $("#pop").close(); break; }
     case "solin-del": if (!confirm("¿Borrar este video?")) return; S.solin = drop(S.solin); $("#pop").close(); break;
+    case "repo-hide": if (!S.repoHide.includes(el.dataset.name)) S.repoHide.push(el.dataset.name); break;
+    case "repo-show": S.repoHide = S.repoHide.filter((n) => n !== el.dataset.name); repos.showHidden = true; break;
+    case "repo-reload": loadRepos(true); render(); return;
     case "open-menu": $("#sidebar").classList.toggle("open"); return;
     case "plan-warn": openPop("Plan-73 cambió", planWarnHTML); return;
     case "week-nav": { const dir = +el.dataset.dir; weekOff = dir === 0 ? 0 : Math.min(0, weekOff + dir); render(); return; }
