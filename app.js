@@ -86,7 +86,7 @@ const NAV = [
   { group: "Cuerpo", items: [["rutina", "Gym"], ["judo", "Judo"], ["surf", "Surf"], ["comida", "Comida"], ["fisico", "Cambio físico"]] },
   { group: "Día a día", items: [["calendario", "Calendario"], ["habitos", "Hábitos"], ["compras", "Compras"], ["diario", "Diario"]] },
   { group: "Aprender", items: [["estudio", "Estudio"], ["idiomas", "Idiomas"], ["lectura", "Lectura"]] },
-  { group: "Crear", items: [["solin", "Solinvitto"], ["contenido", "Contenido"], ["proyectos", "Proyectos"], ["repos", "Repos"], ["ideas", "Ideas"]] },
+  { group: "Crear", items: [["contenido", "Contenido"], ["proyectos", "Proyectos"], ["repos", "Repos"], ["ideas", "Ideas"]] },
   { group: "Guardados", items: [["pinterest", "Pinterest"], ["media", "Fotos"], ["watch", "Para ver"]] },
 ];
 
@@ -125,6 +125,7 @@ const DEFAULT_STATE = {
   mediaGist: "",               // id del gist donde se guardan las fotos
   books: [],                   // lectura: { id, title, author, pages, page, status: "want" | "reading" | "done", rating, notes, cover, added, started, finished }
   readDays: [],                // días en que leí (para la racha)
+  channels: [{ id: "solin", name: "Solinvitto" }],   // proyectos de video dentro de Contenido (cada video tiene ch = id del proyecto; sin ch = solin)
   solin: [],                   // Solinvitto: { id, title, plat, stage 0-4, hook, script, link, date, notes }
   repoHide: ["Pagina-de-Marcos"],   // repos de GitHub que no quiero ver (por nombre)
   readGoal: 12,                // meta de libros del año
@@ -148,7 +149,7 @@ function normalize(data) {
   const s = { ...structuredClone(DEFAULT_STATE), ...data };
   s.logs = { ...DEFAULT_STATE.logs, ...s.logs };
   for (const k of ["waza", "notes", "habits"]) s[k] = s[k] || {};
-  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "langs", "buy", "watch", "music", "sc", "journal", "pins", "media", "books", "readDays", "solin", "repoHide"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
+  for (const k of ["tasks", "weights", "projects", "content", "ideas", "study", "spots", "langs", "buy", "watch", "music", "sc", "journal", "pins", "media", "books", "readDays", "solin", "repoHide", "channels"]) s[k] = Array.isArray(s[k]) ? s[k] : [];
   // Las notas libres viejas de Uruguay pasan a la lista de notas (una sola vez)
   if (s.uyNotes) { (s.notes.uruguay = s.notes.uruguay || []).unshift({ id: uid(), text: s.uyNotes, date: today() }); }
   // "Estilo de vida" se reemplazó por Hábitos: sus lugares y notas pasan a Ideas, una sola vez.
@@ -1059,6 +1060,50 @@ async function loadRepos(force) {
   repos.busy = false;
   if (route() === "repos") render();
 }
+/* ---------- Proyectos de video (dentro de Contenido): cada uno con su tablero ---------- */
+const selCh = { id: null, adding: false };
+const chOf = (v) => v.ch || "solin";
+function channelsHTML() {
+  const chs = S.channels;
+  if (!chs.some((c) => c.id === selCh.id)) selCh.id = chs[0]?.id || null;
+  const cur = chs.find((c) => c.id === selCh.id), adding = selCh.adding || !cur;
+  const count = (c) => S.solin.filter((v) => chOf(v) === c.id).length;
+  const tabs = `<div class="filters ch-tabs">${chs.map((c) => `<button class="chip ${c.id === selCh.id && !selCh.adding ? "on" : ""}" type="button" data-act="ch-sel" data-id="${c.id}">${esc(c.name)} <span class="muted">${count(c)}</span></button>`).join("")}<button class="chip ch-plus ${adding ? "on" : ""}" type="button" data-act="ch-new">＋ Nuevo proyecto</button></div>`;
+  const newForm = adding ? `<form class="inline ch-new" data-form="channel"><input name="name" placeholder="Nombre del proyecto (ej: Solinvitto, otra cuenta, un canal…)" required maxlength="40" /><button class="btn btn-primary">Crear</button></form>` : "";
+  let body = "", notes = "";
+  if (cur && !selCh.adding) {
+    const all = S.solin.filter((v) => chOf(v) === cur.id);
+    const list = all.filter((v) => (solF.st === "todos" || v.stage === +solF.st) && (solF.plat === "todos" || v.plat === solF.plat));
+    const sorted = [...list].sort((a, b) => a.stage - b.stage || (a.date || "9").localeCompare(b.date || "9"));
+    const n = (i) => all.filter((v) => v.stage === i).length;
+    const chip = (k, label, c) => `<button class="chip ${String(solF.st) === String(k) ? "on" : ""}" type="button" data-act="solin-f" data-st="${k}">${label}${c != null ? ` <span class="muted">${c}</span>` : ""}</button>`;
+    const next = all.filter((v) => v.stage < 4 && v.date).sort((a, b) => a.date.localeCompare(b.date))[0];
+    body = `
+      <div class="ch-head">
+        <label class="ch-name"><input class="ch-title" data-ch-rename="${cur.id}" value="${esc(cur.name)}" maxlength="40" size="${Math.max(6, cur.name.length)}" aria-label="Nombre del proyecto" title="Tocá el nombre para cambiarlo" /><span class="ch-edit" aria-hidden="true">✎</span></label>
+        <button class="btn btn-sm btn-ghost" type="button" data-act="ch-del" data-id="${cur.id}">Borrar proyecto</button>
+      </div>
+      <form class="inline" data-form="solin">
+        <input name="title" placeholder="Idea de video…" required />
+        <select name="plat" class="opt" style="flex:0 1 150px" aria-label="Plataforma">${SOL_PLATS.map((p) => `<option>${p}</option>`).join("")}</select>
+        <button class="btn btn-primary">Agregar</button>
+      </form>
+      <p class="small muted" style="margin:10px 0 14px">${all.length ? `${n(4)} publicados · ${all.length - n(4)} en camino${next ? ` · próximo: ${fmtDate(next.date)}` : ""}` : "Escribí la idea y listo. Después la abrís para sumarle gancho, guion y link."}</p>
+      <div class="filters" style="margin-bottom:14px">
+        ${chip("todos", "Todos", all.length)}${SOL_STAGES.map((s, i) => chip(i, s, n(i))).join("")}
+        <select data-act="solin-plat" aria-label="Plataforma"><option value="todos">Todas las plataformas</option>${SOL_PLATS.map((p) => `<option ${solF.plat === p ? "selected" : ""}>${p}</option>`).join("")}</select>
+      </div>
+      ${sorted.length ? `<div class="bgrid">${sorted.map((v) => `<button class="book vcard" type="button" data-act="solin-open" data-id="${v.id}">
+        <span class="binfo"><span class="vmeta"><span class="vst s${v.stage}">${SOL_STAGES[v.stage]}</span><span class="small muted">${esc(v.plat)}${v.date ? " · " + fmtDate(v.date) : ""}</span></span>
+        <b>${esc(v.title)}</b>${v.hook ? `<span class="muted small">“${esc(v.hook)}”</span>` : ""}</span></button>`).join("")}</div>`
+        : `<p class="empty" style="margin:0">${all.length ? "No hay videos con ese filtro." : "Todavía no hay videos en este proyecto."}</p>`}`;
+    notes = `<div class="bento" style="margin-top:16px">${notesCard(cur.id === "solin" ? "solin" : "ch-" + cur.id, "Notas de " + esc(cur.name), "c-12")}</div>`;
+  }
+  return `<section class="ch-sec">
+    <div class="sec-title"><h2>Proyectos de video</h2><p>Un tablero por proyecto, de la idea a publicado. Tocá un video para ver y editar los detalles.</p></div>
+    <div class="card ch-card">${tabs}${newForm}${body}</div>${notes}
+  </section>`;
+}
 const VIEWS = {
   inicio() {
     const d = ROUTINE[new Date().getDay()];
@@ -1643,33 +1688,6 @@ const VIEWS = {
     </div>`;
   },
 
-  solin() {
-    const all = S.solin, list = all.filter((v) => (solF.st === "todos" || v.stage === +solF.st) && (solF.plat === "todos" || v.plat === solF.plat));
-    const sorted = [...list].sort((a, b) => a.stage - b.stage || (a.date || "9").localeCompare(b.date || "9"));
-    const n = (i) => all.filter((v) => v.stage === i).length;
-    const chip = (k, label, c) => `<button class="chip ${String(solF.st) === String(k) ? "on" : ""}" data-act="solin-f" data-st="${k}">${label}${c != null ? ` <span class="muted">${c}</span>` : ""}</button>`;
-    const next = all.filter((v) => v.stage < 4 && v.date).sort((a, b) => a.date.localeCompare(b.date))[0];
-    return `
-    ${head("Solinvitto", "Ideas y videos para las redes: de la idea a publicado.")}
-    <div class="card" style="margin-bottom:16px">
-      <form class="inline" data-form="solin">
-        <input name="title" placeholder="Idea de video…" required />
-        <select name="plat" class="opt" style="flex:0 1 150px">${SOL_PLATS.map((p) => `<option>${p}</option>`).join("")}</select>
-        <button class="btn btn-primary">Agregar</button>
-      </form>
-      <p class="small muted" style="margin:10px 0 0">${all.length ? `${n(4)} publicados · ${all.length - n(4)} en camino${next ? ` · próximo: ${fmtDate(next.date)}` : ""}` : "Escribí la idea y listo. Después la abrís para sumarle gancho, guion y link."}</p>
-    </div>
-    <div class="filters" style="margin-bottom:14px">
-      ${chip("todos", "Todos", all.length)}${SOL_STAGES.map((s, i) => chip(i, s, n(i))).join("")}
-      <select data-act="solin-plat" aria-label="Plataforma"><option value="todos">Todas las plataformas</option>${SOL_PLATS.map((p) => `<option ${solF.plat === p ? "selected" : ""}>${p}</option>`).join("")}</select>
-    </div>
-    ${sorted.length ? `<div class="bgrid">${sorted.map((v) => `<button class="book vcard" type="button" data-act="solin-open" data-id="${v.id}">
-      <span class="binfo"><span class="vmeta"><span class="vst s${v.stage}">${SOL_STAGES[v.stage]}</span><span class="small muted">${esc(v.plat)}${v.date ? " · " + fmtDate(v.date) : ""}</span></span>
-      <b>${esc(v.title)}</b>${v.hook ? `<span class="muted small">“${esc(v.hook)}”</span>` : ""}</span></button>`).join("")}</div>`
-      : `<div class="card"><p class="empty" style="margin:0">${all.length ? "No hay videos con ese filtro." : "Todavía no hay videos. Agregá la primera idea arriba."}</p></div>`}
-    <div class="bento" style="margin-top:16px">${notesCard("solin", "Notas de Solinvitto", "c-12")}</div>`;
-  },
-
   repos() {
     if (!repos.tried) loadRepos();
     const hide = new Set(S.repoHide), all = (repos.list || []).sort((a, b) => b.pushed.localeCompare(a.pushed));
@@ -1695,7 +1713,8 @@ const VIEWS = {
 
   contenido() {
     return `
-    ${head("Contenido", "Videos y posts: judo, cambio físico, estiramientos, surf y Uruguay.")}
+    ${head("Contenido", "Mis ideas de videos y posts, y un tablero para cada proyecto.")}
+    <div class="sec-title"><h2>Ideas de contenido</h2><p>Judo, cambio físico, estiramientos, surf y Uruguay.</p></div>
     <div class="card" style="margin-bottom:16px">
       <form class="inline" data-form="content">
         <input name="title" placeholder="Idea de video / post" required />
@@ -1716,6 +1735,7 @@ const VIEWS = {
         </div>`;
       }).join("")}
     </div>
+    ${channelsHTML()}
     <div class="bento" style="margin-top:16px">${notesCard("contenido", "Notas", "c-12")}</div>`;
   },
 
@@ -1906,7 +1926,7 @@ function refreshWaza() {
 /* =========================================================
    Router
    ========================================================= */
-function route() { const r = location.hash.slice(1); return VIEWS[r] ? r : "inicio"; }
+function route() { let r = location.hash.slice(1); if (r === "solin") r = "contenido"; return VIEWS[r] ? r : "inicio"; }
 function renderNav() {
   const cur = route();
   $("#nav").innerHTML = NAV.map((g) => `${g.group ? `<div class="nav-group">${g.group}</div>` : ""}${g.items.map(([id, label]) =>
@@ -1962,7 +1982,7 @@ function cmdkItems(q) {
     { k: "Acción", label: "Ver el calendario de entreno y marcar días", hint: "Gym", run: () => act({ dataset: { act: "open-cal" } }) },
     { k: "Acción", label: "Escribir en el diario", hint: "Diario", go: "diario", focus: "form[data-form=journal] textarea" },
     { k: "Acción", label: "Anotar una idea", hint: "Ideas", run: () => $("#quick-idea input").focus() },
-    { k: "Acción", label: "Anotar una idea de video", hint: "Solinvitto", go: "solin", focus: "form[data-form=solin] input" },
+    { k: "Acción", label: "Anotar una idea de video", hint: "Contenido", go: "contenido", focus: "form[data-form=solin] input" },
     { k: "Acción", label: "Agregar un libro", hint: "Lectura", go: "lectura", focus: "#book-q" },
     { k: "Acción", label: "Pegar una foto", hint: "Fotos", go: "media" },
     { k: "Acción", label: "Abrir Spotify", hint: "Música", run: () => $("#mini-open").click() },
@@ -1973,7 +1993,7 @@ function cmdkItems(q) {
   if (t.length >= 2) {   // también busca en lo que escribiste
     [["Tarea", S.tasks, (x) => x.text, "inicio"], ["Idea", S.ideas, (x) => x.text, "ideas"], ["Diario", S.journal, (x) => x.text, "diario"],
       ["Compra", S.buy, (x) => x.text, "compras"], ["Para ver", S.watch, (x) => x.text, "watch"], ["Estudio", S.study, (x) => `${x.subject} ${x.text}`, "estudio"],
-      ["Proyecto", S.projects, (x) => x.name, "proyectos"], ["Libro", S.books || [], (x) => `${x.title} ${x.author || ""}`, "lectura"], ["Video", S.solin || [], (x) => `${x.title} ${x.hook || ""}`, "solin"]]
+      ["Proyecto", S.projects, (x) => x.name, "proyectos"], ["Libro", S.books || [], (x) => `${x.title} ${x.author || ""}`, "lectura"], ["Video", S.solin || [], (x) => `${x.title} ${x.hook || ""}`, "contenido"]]
       .forEach(([k, arr, f, go]) => arr.filter((x) => hit(f(x))).slice(0, 4).forEach((x) => items.push({ k, label: String(f(x)).replace(/\s+/g, " ").trim().slice(0, 80), hint: "", go })));
   }
   return items.slice(0, 40);
@@ -2019,7 +2039,7 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === "/" && !typing && !e.ctrlKey && !e.metaKey && !e.altKey && entered) { e.preventDefault(); openCmdk(); }
 });
 
-const UNDOABLE = /^(del-task|del-check|del-weight|del-study|del-idea|del-content|del-note|del-ptask|del-vocab|del-lang-res|del-pin|repo-hide|clear-bought|clear-watched)$/;
+const UNDOABLE = /^(del-task|del-check|del-weight|del-study|del-idea|del-content|del-note|del-ptask|del-vocab|del-lang-res|del-pin|repo-hide|ch-del|clear-bought|clear-watched)$/;
 window.addEventListener("hashchange", () => {
   if (route() === "rutina" && !render.keepDay) { selDay = new Date().getDay(); weekOff = 0; }
   if (route() === "calendario") { calMonth = null; calSel = null; }
@@ -2075,7 +2095,8 @@ document.addEventListener("submit", (e) => {
     case "lang-res": langById(f.dataset.id).res.push({ id: uid(), text: v.text }); break;
     case "vocab": langById(f.dataset.id).vocab.unshift({ id: uid(), w: v.w, m: v.m }); break;
     case "note": (S.notes[f.dataset.key] = S.notes[f.dataset.key] || []).unshift({ id: uid(), text: v.text, date: today() }); break;
-    case "solin": S.solin.unshift({ id: uid(), title: v.title.trim(), plat: v.plat || "TikTok", stage: 0, hook: "", script: "", link: "", date: "", notes: "" }); break;
+    case "channel": { const c = { id: uid(), name: v.name.trim().slice(0, 40) }; S.channels.push(c); selCh.id = c.id; selCh.adding = false; solF.st = "todos"; solF.plat = "todos"; break; }
+    case "solin": S.solin.unshift({ id: uid(), ch: selCh.id, title: v.title.trim(), plat: v.plat || "TikTok", stage: 0, hook: "", script: "", link: "", date: "", notes: "" }); break;
     case "content": S.content.push({ id: uid(), title: v.title, cat: cleanTag(v.cat), stage: 0 }); break;
     case "project": S.projects.push({ id: uid(), status: "Activo", tasks: [], ...v }); break;
     case "ptask": S.projects.find((p) => p.id === f.dataset.pid).tasks.push({ id: uid(), text: v.text, done: false }); break;
@@ -2154,6 +2175,9 @@ function act(el) {
     case "repo-hide": if (!S.repoHide.includes(el.dataset.name)) S.repoHide.push(el.dataset.name); break;
     case "repo-show": S.repoHide = S.repoHide.filter((n) => n !== el.dataset.name); repos.showHidden = true; break;
     case "repo-reload": loadRepos(true); render(); return;
+    case "ch-sel": selCh.id = el.dataset.id; selCh.adding = false; solF.st = "todos"; solF.plat = "todos"; break;
+    case "ch-new": selCh.adding = !selCh.adding; break;
+    case "ch-del": { const c = S.channels.find((x) => x.id === el.dataset.id); if (!c) return; const n = S.solin.filter((v) => chOf(v) === c.id).length; if (!confirm(`¿Borrar el proyecto «${c.name}»${n ? ` y sus ${n} video${n === 1 ? "" : "s"}` : ""}?`)) return; S.channels = S.channels.filter((x) => x.id !== c.id); S.solin = S.solin.filter((v) => chOf(v) !== c.id); selCh.id = null; break; }
     case "open-menu": $("#sidebar").classList.toggle("open"); return;
     case "plan-warn": openPop("Plan-73 cambió", planWarnHTML); return;
     case "week-nav": { const dir = +el.dataset.dir; weekOff = dir === 0 ? 0 : Math.min(0, weekOff + dir); render(); return; }
@@ -2240,10 +2264,13 @@ document.addEventListener("click", (e) => {
 document.addEventListener("change", (e) => {
   const el = e.target.closest("[data-act]");
   if (el && (el.tagName === "SELECT" || el.type === "checkbox" || el.type === "date")) act(el);
+  const cr = e.target.dataset?.chRename;
+  if (cr) { const c = S.channels.find((x) => x.id === cr), nv = e.target.value.trim().slice(0, 40); if (c && nv && nv !== c.name) { c.name = nv; commit(); } else if (c) e.target.value = c.name; }
   const wf = e.target.dataset?.wf;
   if (wf && wf !== "q") { wazaF[wf] = e.target.value; refreshWaza(); }
 });
 document.addEventListener("input", (e) => {
+  if (e.target.dataset?.chRename) { e.target.size = Math.max(6, e.target.value.length); return; }
   if (e.target.id === "book-q") {   // buscar libros mientras escribís
     bookQ = e.target.value; clearTimeout(bookSearchT);
     if (bookQ.trim().length < 3) { bookSug = []; bookBusy = false; bookErr = false; bookSearchN++; renderBookSug(); return; }
@@ -2836,3 +2863,28 @@ render();
 loadPlan73();
 initMusic();
 mediaInit();
+
+/* ---------- Temas de color (se guardan en este dispositivo, no se sincronizan) ---------- */
+const THEMES = [["noche", "Noche", "#05060a", "#4d7cff"], ["grafito", "Grafito", "#0d0d10", "#a3b0ff"], ["bosque", "Bosque", "#050b08", "#3fcf8e"], ["atardecer", "Atardecer", "#0c0708", "#ff7a59"], ["claro", "Claro", "#f3f4f8", "#3b66e8"]];
+const THEME_KEY = "manuhq-theme";
+const themeNow = () => document.documentElement.dataset.theme || "noche";
+function renderThemePop() {
+  const cur = themeNow();
+  $("#theme-pop").innerHTML = `<p class="tp-t">Tema de color</p>` + THEMES.map(([k, n, bg, ac]) => `<button type="button" role="menuitemradio" aria-checked="${k === cur}" class="tp-opt ${k === cur ? "on" : ""}" data-theme-set="${k}"><span class="tp-sw" style="background:${bg}"><i style="background:${ac}"></i></span><span>${n}</span><b aria-hidden="true">✓</b></button>`).join("");
+}
+function applyTheme(t) {
+  const th = THEMES.find((x) => x[0] === t) || THEMES[0];
+  if (th[0] === "noche") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = th[0];
+  $("meta[name=theme-color]")?.setAttribute("content", th[2]);
+  try { localStorage.setItem(THEME_KEY, th[0]); } catch (e) {}
+  renderThemePop();
+}
+function toggleThemePop(open) {
+  const p = $("#theme-pop"), on = open ?? p.hidden;
+  p.hidden = !on; $("#theme-btn").setAttribute("aria-expanded", String(on));
+}
+$("#theme-btn").addEventListener("click", (e) => { e.stopPropagation(); toggleThemePop(); });
+$("#theme-pop").addEventListener("click", (e) => { const b = e.target.closest("[data-theme-set]"); if (b) applyTheme(b.dataset.themeSet); });
+document.addEventListener("click", (e) => { if (!$("#theme-pop").hidden && !e.target.closest(".theme-wrap")) toggleThemePop(false); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#theme-pop").hidden) { toggleThemePop(false); $("#theme-btn").focus(); } });
+applyTheme((() => { try { return localStorage.getItem(THEME_KEY); } catch (e) { return null; } })() || "noche");

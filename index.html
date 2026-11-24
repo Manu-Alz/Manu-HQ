@@ -10,7 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,500..900&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@600&text=%E7%B7%B4%E4%BD%93%E5%8B%9D%E8%B2%A0%E8%87%AA%E4%BB%96%E5%85%B1%E6%A0%84%E8%AD%B7%E8%BA%AB%E6%9F%94%E9%81%93%E6%B3%95%E8%A1%93&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=69" />
+  <script>try{var t=localStorage.getItem("manuhq-theme");if(t&&t!=="noche")document.documentElement.dataset.theme=t}catch(e){}</script>
+  <link rel="stylesheet" href="styles.css?v=74" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%234d7cff'/><text x='50' y='68' font-family='Arial Black' font-size='48' font-weight='900' text-anchor='middle' fill='white'>HQ</text></svg>" />
 </head>
 <body>
@@ -99,6 +100,12 @@
             <span class="mini-title" id="scmini-title">SoundCloud</span>
           </button>
           <span class="mini-bar" aria-hidden="true"><i id="scmini-prog"></i></span>
+        </div>
+        <div class="theme-wrap">
+          <button class="icon-btn" id="theme-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="theme-pop" aria-label="Cambiar tema de color" title="Tema de color">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.7 1.8-1.7H17a4 4 0 0 0 4-4c0-4.4-4-8.2-9-8.2z"/><circle cx="7.5" cy="11" r="1" fill="currentColor"/><circle cx="10.5" cy="7" r="1" fill="currentColor"/><circle cx="15.5" cy="7.5" r="1" fill="currentColor"/></svg>
+          </button>
+          <div class="theme-pop" id="theme-pop" role="menu" hidden></div>
         </div>
         <div class="topbar-right">
           <span id="top-sync"></span>
@@ -203,6 +210,6 @@
     </div>
   </div>
 
-  <script src="gate.js?v=69"></script>
+  <script src="gate.js?v=74"></script>
 </body>
 </html>
