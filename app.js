@@ -82,9 +82,11 @@ const ICONS = {
 };
 const NAV = [
   { group: null, items: [["inicio", "Inicio"]] },
-  { group: "Cuerpo", items: [["rutina", "Rutina / Gym"], ["comida", "Comida"], ["judo", "Judo"], ["fisico", "Cambio físico"], ["surf", "Surf"]] },
-  { group: "Vida", items: [["calendario", "Calendario"], ["habitos", "Hábitos"], ["diario", "Diario"], ["estudio", "Estudio"], ["idiomas", "Idiomas"], ["lectura", "Lectura"], ["compras", "Compras"], ["watch", "Watch list"]] },
-  { group: "Trabajo", items: [["proyectos", "Proyectos"], ["contenido", "Contenido"], ["solin", "Solinvitto"], ["ideas", "Ideas"], ["pinterest", "Pinterest"], ["media", "Media"]] },
+  { group: "Cuerpo", items: [["rutina", "Gym"], ["judo", "Judo"], ["surf", "Surf"], ["comida", "Comida"], ["fisico", "Cambio físico"]] },
+  { group: "Día a día", items: [["calendario", "Calendario"], ["habitos", "Hábitos"], ["compras", "Compras"], ["diario", "Diario"]] },
+  { group: "Aprender", items: [["estudio", "Estudio"], ["idiomas", "Idiomas"], ["lectura", "Lectura"]] },
+  { group: "Crear", items: [["solin", "Solinvitto"], ["contenido", "Contenido"], ["proyectos", "Proyectos"], ["ideas", "Ideas"]] },
+  { group: "Guardados", items: [["pinterest", "Pinterest"], ["media", "Fotos"], ["watch", "Para ver"]] },
 ];
 
 /* ---------- Estado ---------- */
@@ -1142,7 +1144,7 @@ const VIEWS = {
       detail = exList(d);
     }
     const html = `
-    ${head("Rutina / Gym", PLAN?.updated ? esc(PLAN.updated) : "Plan-73: fuerza y potencia para judo −73 kg.",
+    ${head("Gym", PLAN?.updated ? esc(PLAN.updated) : "Plan-73: fuerza y potencia para judo −73 kg.",
       `${warnBadge()}<a class="btn" href="${PLAN73}" target="_blank" rel="noopener">Abrir Plan-73 ↗</a>`, "Plan-73")}
     ${PLAN ? `<div class="filters">${PLAN.blocks.map((x) => `<button class="chip ${x.id === b.id ? "on" : ""}" data-act="sel-block" data-block="${x.id}">${esc(x.name)}<span class="muted small mono">${esc(x.weeks)}</span>${x.id === cur.id ? `<span class="dot" style="background:var(--accent)" title="Bloque actual en Plan-73"></span>` : ""}</button>`).join("")}</div>` : ""}
     <div class="bento"><div class="c-12">${gymCal({ sel: selDay, R })}</div></div>
@@ -1450,7 +1452,7 @@ const VIEWS = {
       return `<button class="mimg ${miss ? "miss" : ""}" type="button" data-act="media-open" data-id="${m.id}" style="aspect-ratio:${m.w} / ${m.h}" aria-label="Abrir foto${m.tag ? ` (${esc(m.tag)})` : ""}"><img data-mid="${m.id}" alt="" />${miss ? `<span class="mwait">Bajando…</span>` : ""}${m.tag ? `<span class="mtag">${esc(m.tag)}</span>` : ""}</button>`;
     };
     return `
-    ${head("Media", "Tus fotos, todas juntas. Pegalas con Ctrl + V, arrastralas o elegilas: se guardan y se sincronizan.")}
+    ${head("Fotos", "Tus fotos, todas juntas. Pegalas con Ctrl + V, arrastralas o elegilas: se guardan y se sincronizan.")}
     <div class="bento"><div class="card c-12">
       <div class="mdrop" id="mdrop">
         <b>Pegá tus fotos acá</b>
@@ -1772,7 +1774,7 @@ const VIEWS = {
       ${x.kind ? `<span class="small mono buy-price">${esc(x.kind)}</span>` : ""}
       <button class="del" data-act="del-check" data-key="watch" data-id="${x.id}" title="Borrar">✕</button></li>`;
     return `
-    ${head("Watch list", "Películas, series y videos para ver. Se guarda solo.")}
+    ${head("Para ver", "Películas, series y videos para ver. Se guarda solo.")}
     <div class="bento">
       <div class="card c-8">
         <div class="card-head"><h2>Para ver</h2><span class="sub">${pend.length}</span></div>
@@ -1883,7 +1885,7 @@ function renderTabbar() {
   $("#tabbar").innerHTML = TABS.map(([id, label]) => `<a href="#${id}" class="${id === cur ? "active" : ""}" ${id === cur ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[id]}"/></svg><span>${label}</span></a>`).join("")
     + `<button type="button" class="${more ? "active" : ""}" data-act="open-menu" aria-label="Más secciones"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>${more ? esc(routeLabel(cur)) : "Más"}</span></button>`;
 }
-/* Cada sección arranca con su grupo (Cuerpo, Vida, Trabajo) para que siempre sepas dónde estás, y todos los campos tienen nombre para lectores de pantalla */
+/* Cada sección arranca con su grupo (Cuerpo, Día a día, Aprender, Crear, Guardados) para que siempre sepas dónde estás, y todos los campos tienen nombre para lectores de pantalla */
 function enhanceView() {
   const v = $("#view"), head = v.querySelector(".page-head > div");
   if (head && !head.querySelector(".kicker")) {
@@ -1913,7 +1915,7 @@ function cmdkItems(q) {
     { k: "Acción", label: "Anotar una idea", hint: "Ideas", run: () => $("#quick-idea input").focus() },
     { k: "Acción", label: "Anotar una idea de video", hint: "Solinvitto", go: "solin", focus: "form[data-form=solin] input" },
     { k: "Acción", label: "Agregar un libro", hint: "Lectura", go: "lectura", focus: "#book-q" },
-    { k: "Acción", label: "Pegar una foto", hint: "Media", go: "media" },
+    { k: "Acción", label: "Pegar una foto", hint: "Fotos", go: "media" },
     { k: "Acción", label: "Abrir Spotify", hint: "Música", run: () => $("#mini-open").click() },
     { k: "Acción", label: "Abrir SoundCloud", hint: "Música", run: () => $("#scmini-open").click() },
   ];

@@ -1237,3 +1237,11 @@ form.inline input[type=date] { flex: 0 1 150px; }
 .getout em { margin-top: 10px; color: var(--muted); font-size: 14.5px; font-style: italic; }
 .tagbtn { background: none; border: 0; padding: 0; cursor: pointer; border-radius: 999px; }
 .tagbtn:hover .tag { outline: 1px solid var(--line-2); }
+
+/* Barra lateral: grupos más claros */
+.nav-group { font: 600 12px var(--font); text-transform: none; letter-spacing: .02em; color: var(--dim); padding: 18px 12px 6px; }
+@media (min-width: 901px) and (max-height: 900px) {
+  nav { gap: 0; }
+  nav a { padding-top: 6px; padding-bottom: 6px; }
+  .nav-group { padding: 12px 12px 4px; }
+}
