@@ -1235,3 +1235,5 @@ form.inline input[type=date] { flex: 0 1 150px; }
 .getout b { font: 800 clamp(26px, 4vw, 40px)/1.1 var(--display); letter-spacing: -.02em; }
 .getout span { color: var(--dim); font-size: 13.5px; }
 .getout em { margin-top: 10px; color: var(--muted); font-size: 14.5px; font-style: italic; }
+.tagbtn { background: none; border: 0; padding: 0; cursor: pointer; border-radius: 999px; }
+.tagbtn:hover .tag { outline: 1px solid var(--line-2); }

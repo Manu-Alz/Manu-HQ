@@ -46,7 +46,17 @@ const LABELS = {
 const TASK_AREAS = ["general", "gym", "judo", "fisico", "surf", "uruguay", "estudio", "proyectos"];
 const CONTENT_STAGES = ["Idea", "Grabar", "Editar", "Publicado"];
 const CONTENT_CATS = ["judo", "fisico", "estiramientos", "surf", "uruguay"];
-const tag = (a) => `<span class="tag ${esc(a)}">${esc(LABELS[a] || a)}</span>`;
+const CONTENT_SUGGEST = ["creativo", "storytelling", "humor", "tutorial", "vlog", "entrenamiento", "motivación", "edición", "técnica", "antes y después", "proyectos", "tecnología", "eventos", "viajes", "comida", "música"];
+const TAG_HUES = [210, 265, 330, 150, 35, 185, 95, 10];
+function tag(a) {
+  if (LABELS[a]) return `<span class="tag ${esc(a)}">${esc(LABELS[a])}</span>`;
+  let h = 0; for (const ch of String(a)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const hue = TAG_HUES[h % TAG_HUES.length];
+  return `<span class="tag" style="color:hsl(${hue} 85% 76%);background:hsl(${hue} 70% 60% / .13)">${esc(a)}</span>`;
+}
+let contF = "todas";
+const cleanTag = (s) => { const t = (s || "").trim().toLowerCase().replace(/\s+/g, " ").slice(0, 24); return Object.keys(LABELS).find((k) => k === t || LABELS[k].toLowerCase() === t) || t || "general"; };
+
 
 const ICONS = {
   inicio: "M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z",
@@ -1638,16 +1648,17 @@ const VIEWS = {
     <div class="card" style="margin-bottom:16px">
       <form class="inline" data-form="content">
         <input name="title" placeholder="Idea de video / post" required />
-        <select name="cat" style="flex:0 1 180px">${CONTENT_CATS.map((c) => `<option value="${c}">${LABELS[c]}</option>`).join("")}</select>
+        <input name="cat" list="cat-list" placeholder="Etiqueta (ej: creativo)" autocomplete="off" style="flex:0 1 220px" aria-label="Etiqueta" />\n        <datalist id="cat-list">${[...new Set([...CONTENT_CATS, ...CONTENT_SUGGEST, ...S.content.map((c) => c.cat)])].map((c) => `<option value="${esc(LABELS[c] ? c : c)}">`).join("")}</datalist>
         <button class="btn btn-primary">Agregar</button>
       </form>
     </div>
+    ${(() => { const used = [...new Set(S.content.map((c) => c.cat))]; return used.length > 1 ? `<div class="filters" style="margin-bottom:14px"><button class="chip ${contF === "todas" ? "on" : ""}" data-act="content-f" data-cat="todas">Todas</button>${used.map((u) => `<button class="chip ${contF === u ? "on" : ""}" data-act="content-f" data-cat="${esc(u)}">${esc(LABELS[u] || u)} <span class="muted">${S.content.filter((c) => c.cat === u).length}</span></button>`).join("")}</div>` : ""; })()}
     <div class="kanban">
       ${CONTENT_STAGES.map((st, si) => {
-        const items = S.content.filter((c) => c.stage === si);
+        const items = S.content.filter((c) => c.stage === si && (contF === "todas" || c.cat === contF));
         return `<div class="col"><h3>${st}<span class="muted mono">${items.length}</span></h3>
           ${items.map((c) => `<div class="kcard">${esc(c.title)}
-            <div class="row">${tag(c.cat)}<span>
+            <div class="row"><button class="tagbtn" type="button" data-act="content-tag" data-id="${c.id}" title="Cambiar etiqueta">${tag(c.cat)}</button><span>
               ${si > 0 ? `<button class="del" data-act="move-content" data-id="${c.id}" data-dir="-1" title="Atrás">←</button>` : ""}
               ${si < 3 ? `<button class="del" data-act="move-content" data-id="${c.id}" data-dir="1" title="Avanzar">→</button>` : ""}
               <button class="del" data-act="del-content" data-id="${c.id}">✕</button></span></div></div>`).join("")}
@@ -2014,7 +2025,7 @@ document.addEventListener("submit", (e) => {
     case "vocab": langById(f.dataset.id).vocab.unshift({ id: uid(), w: v.w, m: v.m }); break;
     case "note": (S.notes[f.dataset.key] = S.notes[f.dataset.key] || []).unshift({ id: uid(), text: v.text, date: today() }); break;
     case "solin": S.solin.unshift({ id: uid(), title: v.title.trim(), plat: v.plat || "TikTok", stage: 0, hook: "", script: "", link: "", date: "", notes: "" }); break;
-    case "content": S.content.push({ id: uid(), title: v.title, cat: v.cat, stage: 0 }); break;
+    case "content": S.content.push({ id: uid(), title: v.title, cat: cleanTag(v.cat), stage: 0 }); break;
     case "project": S.projects.push({ id: uid(), status: "Activo", tasks: [], ...v }); break;
     case "ptask": S.projects.find((p) => p.id === f.dataset.pid).tasks.push({ id: uid(), text: v.text, done: false }); break;
   }
@@ -2140,6 +2151,8 @@ function act(el) {
     case "del-study": S.study = drop(S.study); break;
     case "del-idea": S.ideas = drop(S.ideas); break;
     case "idea-to-content": { const i = byId(S.ideas); S.content.push({ id: uid(), title: i.text, cat: i.tag, stage: 0 }); S.ideas = drop(S.ideas); toast("Pasada a Contenido ✓"); break; }
+    case "content-f": contF = el.dataset.cat; break;
+    case "content-tag": { const c = byId(S.content); if (!c) return; const t = prompt("Etiqueta de esta idea (escribí la que quieras):", LABELS[c.cat] || c.cat); if (t === null) return; c.cat = cleanTag(t); break; }
     case "move-content": { const c = byId(S.content); c.stage = Math.max(0, Math.min(3, c.stage + +el.dataset.dir)); break; }
     case "del-content": S.content = drop(S.content); break;
     case "proj-status": byId(S.projects).status = el.value; break;
