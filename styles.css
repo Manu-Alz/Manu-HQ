@@ -1311,7 +1311,7 @@ html[data-theme=atardecer] { --bg:#0c0708; --bg-2:#120b0c; --card:#191012; --car
   --accent:#ff7a59; --accent-2:#ff4f8b; --accent-rgb:255,122,89; --accent2-rgb:255,79,139; --accent-soft:rgba(255,122,89,.14); --accent-text:#ffaa92; --btn:#e8512f; --btn-h:#cf4222; --radius:20px; }
 html[data-theme=claro] { color-scheme: light; --bg:#f3f4f8; --bg-2:#eaecf3; --card:#ffffff; --card-2:#f6f7fb; --card-3:#eceef5; --line:#e2e5ee; --line-2:#cfd5e4; --text:#151a2b; --muted:#566079; --dim:#7a849e; --text-2:#2f374d;
   --accent:#3b66e8; --accent-2:#6a4de0; --accent-rgb:59,102,232; --accent2-rgb:106,77,224; --accent-soft:rgba(59,102,232,.1); --accent-text:#2a4fc4; --btn:#3b66e8; --btn-h:#2f58d6; --radius:14px;
-  --red:#d93a55; --blue:#2a7fd6; --violet:#6a4de0; --green:#12a063; --amber:#b86e00; --pink:#cc3f93; }
+  --red:#d93a55; --blue:#2a7fd6; --violet:#6a4de0; --green:#12a063; --amber:#9a5a00; --pink:#cc3f93; }
 html[data-theme=claro] input[type=date], html[data-theme=claro] select { color-scheme: light; }
 html[data-theme=claro] .card, html[data-theme=claro] .col { box-shadow: 0 1px 2px rgba(20,30,60,.05); }
 html[data-theme=claro] .theme-pop, html[data-theme=claro] .dlg { box-shadow: 0 18px 50px rgba(20,30,60,.18); }

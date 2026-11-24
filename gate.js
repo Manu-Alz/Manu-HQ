@@ -4,7 +4,7 @@
   const HASH = "fd58e1bd47f422f6eed7e2a0012f4088a31c70e5daf44eaa451df10b4567abdf", KEY = "manuhq-auth";
   const sha = async (s) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("manuhq:" + s)))].map((b) => b.toString(16).padStart(2, "0")).join("");
   const load = (src) => new Promise((ok, err) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = err; document.body.appendChild(s); });
-  const start = async () => { await load("judo-data.js?v=74"); await load("app.js?v=74"); };
+  const start = async () => { await load("judo-data.js?v=76"); await load("app.js?v=76"); };
   let saved = ""; try { saved = localStorage.getItem(KEY) || ""; } catch (e) {}
   if (saved === HASH) return void start();
 

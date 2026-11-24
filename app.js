@@ -1624,27 +1624,25 @@ const VIEWS = {
     const subjects = [...new Set(S.study.map((s) => s.subject))];
     return `
     ${head("Estudio", "Materias, entregas y exámenes.")}
-    <div class="bento">
-      <div class="card c-4 side">
-        <div class="card-head"><h2>Agregar</h2></div>
-        <form class="form-grid" data-form="study">
-          ${fieldHTML({ k: "subject", label: "Materia", req: true, wide: true })}
-          ${fieldHTML({ k: "text", label: "Qué hay que hacer", req: true, wide: true })}
-          ${fieldHTML({ k: "due", label: "Fecha", type: "date" }, "")}
-          <div class="field" style="align-self:end"><button class="btn btn-primary">Agregar</button></div>
-        </form>
-        ${subjects.length ? `<div style="margin-top:16px;display:flex;gap:6px;flex-wrap:wrap">${subjects.map((s) => `<span class="tag estudio">${esc(s)}</span>`).join("")}</div>` : ""}
-      </div>
-      <div class="card c-8">
-        <div class="card-head"><h2>Pendientes</h2><span class="sub">${S.study.filter((s) => !s.done).length} abiertas</span></div>
-        <ul class="list">
-          ${list.map((s) => `<li class="${s.done ? "done" : ""}">
-            <input type="checkbox" data-act="toggle-study" data-id="${s.id}" ${s.done ? "checked" : ""} />
-            <span class="grow"><b style="font-weight:500">${esc(s.subject)}</b> · ${esc(s.text)}</span>
-            <span class="small muted mono">${fmtDate(s.due)}</span>
-            <button class="del" data-act="del-study" data-id="${s.id}">✕</button></li>`).join("") || `<li class="empty" style="background:none">Sin pendientes de estudio.</li>`}
-        </ul>
-      </div>
+    <div class="card" style="margin-bottom:16px">
+      <form class="inline" data-form="study">
+        <input name="subject" list="subj-list" placeholder="Materia" required autocomplete="off" style="flex:0 1 190px" aria-label="Materia" />
+        <datalist id="subj-list">${subjects.map((s) => `<option value="${esc(s)}">`).join("")}</datalist>
+        <input name="text" placeholder="Qué hay que hacer" required aria-label="Qué hay que hacer" />
+        <input name="due" type="date" class="opt" aria-label="Fecha" style="flex:0 1 160px" />
+        <button class="btn btn-primary">Agregar</button>
+      </form>
+      ${subjects.length ? `<div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">${subjects.map((s) => `<span class="tag estudio">${esc(s)}</span>`).join("")}</div>` : ""}
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Pendientes</h2><span class="sub">${S.study.filter((s) => !s.done).length} abiertas</span></div>
+      <ul class="list">
+        ${list.map((s) => `<li class="${s.done ? "done" : ""}">
+          <input type="checkbox" data-act="toggle-study" data-id="${s.id}" ${s.done ? "checked" : ""} />
+          <span class="grow"><b style="font-weight:500">${esc(s.subject)}</b> · ${esc(s.text)}</span>
+          <span class="small muted mono">${fmtDate(s.due)}</span>
+          <button class="del" data-act="del-study" data-id="${s.id}">✕</button></li>`).join("") || `<li class="empty" style="background:none">Sin pendientes de estudio.</li>`}
+      </ul>
     </div>
     <div class="bento">${notesCard("estudio", "Notas", "c-12")}</div>`;
   },
