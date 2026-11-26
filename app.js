@@ -83,7 +83,7 @@ const ICONS = {
   ideas: "M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z",
 };
 const NAV = [
-  { group: null, items: [["inicio", "Inicio"], ["stats", "Estadísticas"]] },
+  { group: null, items: [["inicio", "Inicio"], ["stats", "Dashboard"]] },
   { group: "Cuerpo", items: [["rutina", "Gym"], ["judo", "Judo"], ["surf", "Surf"], ["comida", "Comida"], ["fisico", "Cambio físico"]] },
   { group: "Día a día", items: [["calendario", "Calendario"], ["habitos", "Hábitos"], ["compras", "Compras"], ["diario", "Diario"]] },
   { group: "Aprender", items: [["estudio", "Estudio"], ["idiomas", "Idiomas"], ["lectura", "Lectura"]] },
@@ -1240,9 +1240,12 @@ const VIEWS = {
         ${detail}
       </div>
       <div class="c-4 side stack">
-        ${b ? `<div class="card"><span class="label-sm">${esc(b.name)} · ${esc(b.weeks)}</span><h2 style="margin:6px 0 8px">${esc(b.title)}</h2><p class="muted" style="margin:0">${esc(b.intro || "")}</p></div>` : ""}
-        ${PLAN?.rules ? `<div class="card"><div class="card-head"><h2>La semana</h2></div><div class="plan-html">${PLAN.rules}</div></div>` : ""}
-        ${PLAN?.exec && Object.values(PLAN.exec).some(Boolean) ? `<div class="card"><div class="card-head"><h2>Cómo se ejecuta</h2></div>${["rpe", "rest", "prog"].map((k) => PLAN.exec[k] ? `<details class="more"><summary>${esc(PLAN.exec[k].title)}</summary><div class="plan-html">${PLAN.exec[k].html}</div></details>` : "").join("")}</div>` : ""}
+        <div class="card">
+          <div class="card-head"><h2>Sobre este plan</h2><span class="sub">tocá para abrir</span></div>
+          ${b ? `<details class="more" open><summary>${esc(b.title)} <span class="muted small">· ${esc(b.name)}, ${esc(b.weeks)}</span></summary><div class="plan-html"><p>${esc(b.intro || "")}</p></div></details>` : ""}
+          ${PLAN?.rules ? `<details class="more"><summary>La semana</summary><div class="plan-html">${PLAN.rules}</div></details>` : ""}
+          ${PLAN?.exec ? ["rpe", "rest", "prog"].map((k) => PLAN.exec[k] ? `<details class="more"><summary>${esc(PLAN.exec[k].title)}</summary><div class="plan-html">${PLAN.exec[k].html}</div></details>` : "").join("") : ""}
+        </div>
         ${notesCard("rutina")}
       </div>
     </div>`;
@@ -1264,7 +1267,7 @@ const VIEWS = {
       </div>
     </div>
     <div class="pillars-line">
-      ${PILLARS.map((p) => `<div class="pl-item"><span class="kj" lang="ja">${p.kanji}</span><span class="rm">${p.romaji}</span><b>${p.name}</b><span class="gl">${p.glyphs}</span><span class="ex">${p.short}</span></div>`).join("")}
+      ${PILLARS.map((p) => `<div class="pl-item" title="${esc(p.glyphs)} · ${esc(p.short)}"><span class="kj" lang="ja">${p.kanji}</span><span class="rm">${p.romaji}</span><b>${p.name}</b><span class="gl">${p.glyphs}</span><span class="ex">${p.short}</span></div>`).join("")}
     </div>
     <div class="card" style="margin-top:28px">
       <div class="card-head">
@@ -1355,6 +1358,7 @@ const VIEWS = {
     ${head("Comida", "Qué comer hoy, con la receta de cada cosa. Todo sale de Plan-73.", warnBadge())}
     ${!D ? `<div class="card"><p class="empty">${PLAN ? "Plan-73 no tiene días de comida armados." : "Cargando Plan-73…"}</p></div>` : `
     ${cookToday ? `<div class="card cook-today" style="margin-bottom:16px"><div class="card-head"><span class="label-sm">Hoy se cocina · ${DAY_NAMES[dow]}</span></div><div class="plan-html" style="margin:0">${cookToday.html}</div></div>` : ""}
+    <div class="filters" style="margin-bottom:16px" role="group" aria-label="Elegir el día de comida">${days.map((x, i) => `<button class="chip ${i === sel ? "on" : ""}" type="button" data-act="food-day" data-i="${i}">${esc(x.title)}${i === ti ? `<span class="dot" style="background:var(--accent)" title="Es el de hoy"></span>` : ""}</button>`).join("")}</div>
     <div class="bento">
       <div class="c-8 stack">
       <div class="card">
@@ -1368,9 +1372,6 @@ const VIEWS = {
           ${D.rows.map((r, i) => (isTotal(r) ? "" : `<button class="meal" type="button" data-act="recipe" data-d="${sel}" data-r="${i}"><span class="ms">${esc(cell(r[0]))}</span><span class="mn">${esc(cell(r[1]))}</span><span class="mk">${esc(cell(r[2]))}</span><span class="mgo" aria-hidden="true">›</span></button>`)).join("")}
         </div>
         ${totalRow ? `<div class="meal-total"><span>Total del día</span><span class="mono">${esc(fmtNums(cell(totalRow[2])))}</span></div>` : ""}
-        <div class="filters" style="margin:12px 0 0"><span class="small muted">Ver otro día:</span>
-          ${days.map((x, i) => `<button class="chip ${i === sel ? "on" : ""}" type="button" data-act="food-day" data-i="${i}">${esc(x.title)}${i === ti ? `<span class="dot" style="background:var(--accent)" title="Es el de hoy"></span>` : ""}</button>`).join("")}
-        </div>
       </div>
       ${N?.options?.length ? `<div class="card">
         <div class="card-head"><h2>Recetas y opciones para elegir</h2><span class="sub">Tocá una para ver todas</span></div>
@@ -1383,12 +1384,12 @@ const VIEWS = {
             ${mK ? `<div><span class="label-sm">Calorías</span><b>${esc(cell(mK[1]))}</b></div>` : ""}
             ${mP ? `<div><span class="label-sm">Proteína</span><b>${esc(cell(mP[1]))}</b></div>` : ""}
           </div>
-          ${N?.slots?.length ? `<span class="label-sm" style="display:block;margin:14px 0 6px">Cómo se arma el día</span>
-          <ul class="mini-rows">${N.slots.map((r) => `<li><span class="lbl">${esc(cell(r[0]))}</span><span class="val">${esc(cell(r[1]))}</span><span class="mono">${esc(cell(r[2]))}</span></li>`).join("")}</ul>` : ""}
+          ${N?.slots?.length ? `<details class="more" style="margin:14px 0 10px"><summary>Cómo se arma el día</summary>
+          <ul class="mini-rows">${N.slots.map((r) => `<li><span class="lbl">${esc(cell(r[0]))}</span><span class="val">${esc(cell(r[1]))}</span><span class="mono">${esc(cell(r[2]))}</span></li>`).join("")}</ul></details>` : ""}
           <a class="small" href="#habitos">Chequear los números de hoy en Hábitos →</a>
         </div>
-        ${cook.length ? `<div class="card"><div class="card-head"><h2>Cocina de la semana</h2><span class="sub">Plan-73</span></div>
-          <ul class="cook">${cook.map((c) => `<li class="${c === cookToday ? "today" : ""}"><b>${esc(c.label)}:</b> ${c.html}</li>`).join("")}</ul></div>` : ""}
+        ${cook.length ? `<div class="card"><details class="more" ${cookToday ? "open" : ""}><summary>Cocina de la semana <span class="muted small">· Plan-73</span></summary>
+          <ul class="cook" style="margin-top:12px">${cook.map((c) => `<li class="${c === cookToday ? "today" : ""}"><b>${esc(c.label)}:</b> ${c.html}</li>`).join("")}</ul></details></div>` : ""}
         ${notesCard("comida", "Notas de comida")}
       </div>
     </div>`}`;
@@ -1726,15 +1727,25 @@ const VIEWS = {
     const sNext = S.study.filter((s) => !s.done && s.due).sort((a, b) => a.due.localeCompare(b.due)).slice(0, 3);
     const vid = SOL_STAGES.map((s, i) => ({ s, n: S.solin.filter((v) => v.stage === i).length })), vMax = Math.max(1, ...vid.map((x) => x.n));
     const cont = CONTENT_STAGES.map((s, i) => ({ s, n: S.content.filter((c) => c.stage === i).length })), cMax = Math.max(1, ...cont.map((x) => x.n));
+    const jc = {}; S.journal.forEach((e) => { jc[e.date] = (jc[e.date] || 0) + 1; });
+    const jlevel = (d) => { const n = jc[d] || 0; return n ? Math.min(4, n + 1) : 0; };
+    const jDays = Object.keys(jc).length;
+    const tiles = [["Tareas abiertas", S.tasks.filter((x) => !x.done).length, "inicio"], ["Ideas", S.ideas.length, "ideas"], ["Proyectos activos", S.projects.filter((p) => p.status === "Activo").length, "proyectos"], ["Por comprar", S.buy.filter((x) => !x.done).length, "compras"], ["Para ver", S.watch.filter((x) => !x.done).length, "watch"], ["Videos en camino", S.solin.filter((v) => v.stage < 4).length, "contenido"], ["Palabras", S.langs.reduce((a, l) => a + (l.vocab || []).length, 0), "idiomas"], ["Fotos", S.media.length, "media"], ["Pins", S.pins.length, "pinterest"], ["Entradas del diario", S.journal.length, "diario"]];
+    const soon = [
+      ...S.tasks.filter((x) => !x.done && x.due).map((x) => ({ date: x.due, text: x.text, kind: "Tarea", go: "inicio" })),
+      ...S.study.filter((x) => !x.done && x.due).map((x) => ({ date: x.due, text: `${x.subject} · ${x.text}`, kind: "Estudio", go: "estudio" })),
+      ...S.solin.filter((v) => v.stage < 4 && v.date).map((v) => ({ date: v.date, text: v.title, kind: "Video", go: "contenido" })),
+    ].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6);
     const card = (cls, title, sub, body) => `<div class="card ${cls}"><div class="card-head"><h2>${title}</h2>${sub ? `<span class="sub">${sub}</span>` : ""}</div>${body}</div>`;
     return `
-    ${head("Estadísticas", "Tu progreso en gráficos. Sale solo de lo que ya marcás en cada sección.", warnBadge())}
+    ${head("Dashboard", "Todo tu progreso y tu día a día en un solo lugar. Sale solo de lo que ya marcás.", warnBadge())}
     <div class="kpis row4" style="margin-bottom:16px">
       <div class="kpi"><span class="label-sm">Entrenos, últimas 4 semanas</span><div class="v">${gLast4}<small>días</small></div><div class="d">mejor semana: ${gBest} de 7</div></div>
       <div class="kpi"><span class="label-sm">Hábitos cumplidos</span><div class="v">${hAll}<small>%</small></div><div class="d">promedio de los últimos 30 días</div><div class="bar"><i style="width:${hAll}%"></i></div></div>
       <div class="kpi"><span class="label-sm">Racha de lectura</span><div class="v">${rStreak}<small>días</small></div><div class="d">${doneB.length} de ${goal} libros este año</div></div>
       <div class="kpi"><span class="label-sm">Técnicas de judo</span><div class="v">${dom}<small>/ 100</small></div><div class="d">${learn} aprendiendo</div><div class="bar"><i style="width:${dom}%"></i></div></div>
     </div>
+    <div class="dtiles">${tiles.map(([l, n, go]) => `<a class="dtile" href="#${go}"><b>${n}</b><span>${l}</span></a>`).join("")}</div>
     <div class="bento">
       ${card("c-8", "Entrenos por semana", "últimas 12 semanas", stBars(g12.map((v, i) => ({ v, label: wkLabel(W12[i], i, 12), now: i === 11, title: `Semana del ${fmtDate(W12[i][0])}: ${v} de 7 días` })), 7))}
       ${card("c-4", "Judo", "técnicas del Kodokan", `<div class="ring-row">${stRing(dom, String(dom), "de 100")}<ul class="legend"><li><i class="lg a"></i><b>${dom}</b> dominadas</li><li><i class="lg b"></i><b>${learn}</b> aprendiendo</li><li><i class="lg c"></i><b>${100 - dom - learn}</b> sin empezar</li></ul></div><a class="small" href="#judo">Ver las 100 técnicas →</a>`)}
@@ -1746,6 +1757,9 @@ const VIEWS = {
       ${card("c-6", "Lectura", `${yr}`, `<div class="ring-row">${stRing(Math.round((doneB.length / goal) * 100), `${doneB.length}/${goal}`, "libros")}<ul class="legend"><li><b>${pagesYr}</b> páginas leídas</li><li><b>${S.books.filter((b) => b.status === "reading").length}</b> leyendo ahora</li><li><b>${[...rSet].filter((d) => d.startsWith(yr)).length}</b> días de lectura</li></ul></div>${stBars(perMonth, Math.max(1, ...perMonth.map((m) => m.v)))}`)}
       ${card("c-6", "Estudio", "", S.study.length ? `<div class="ring-row">${stRing(sPct, sPct + "%", "hecho")}<ul class="legend"><li><b>${sDone}</b> terminadas</li><li><b>${S.study.length - sDone}</b> pendientes</li></ul></div>${sNext.length ? `<p class="label-sm" style="margin:14px 0 6px">Lo próximo</p><ul class="list">${sNext.map((s) => `<li><span class="grow"><b style="font-weight:500">${esc(s.subject)}</b> · ${esc(s.text)}</span><span class="small muted mono">${fmtDate(s.due)}</span></li>`).join("")}</ul>` : ""}` : `<p class="empty">Todavía no cargaste pendientes de estudio.</p>`)}
       ${card("c-6", "Videos y contenido", "de la idea a publicado", `<p class="label-sm" style="margin:0 0 8px">Proyectos de video</p>${vid.map((x) => stHbar(x.s, Math.round((x.n / vMax) * 100), String(x.n))).join("")}<p class="label-sm" style="margin:16px 0 8px">Ideas de contenido</p>${cont.map((x) => stHbar(x.s, Math.round((x.n / cMax) * 100), String(x.n))).join("")}`)}
+      ${card("c-6", "Diario", `${S.journal.length} entradas en ${jDays} días`, stHeat(W18, jlevel))}
+      ${card("c-6", "Lo que viene", "con fecha", soon.length ? `<ul class="list">${soon.map((x) => `<li><a class="grow" href="#${x.go}" style="color:var(--text)">${esc(x.text)}</a><span class="tag">${x.kind}</span><span class="small mono ${x.date < t ? "late" : "muted"}">${x.date < t ? "vencido · " : ""}${fmtDate(x.date)}</span></li>`).join("")}</ul>` : `<p class="empty">No hay nada con fecha por ahora.</p>`)}
+
     </div>`;
   },
 
