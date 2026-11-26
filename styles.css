@@ -1407,3 +1407,12 @@ html[data-theme=claro] input[type=checkbox]::after { border-color: #fff; }
 .dtile span { font-size: 12.5px; color: var(--muted); line-height: 1.2; }
 .late { color: var(--red); }
 @media (max-width: 900px) { .dtiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Proyectos: reordenar arrastrando */
+.project .grip { cursor: grab; color: var(--dim); font-size: 18px; line-height: 1; padding: 2px 6px 2px 0; user-select: none; }
+.project .grip:hover { color: var(--accent); }
+.project .card-head { align-items: center; }
+.project .card-head h2 { flex: 1; min-width: 0; }
+.project.dragging { opacity: .45; }
+.project.drop-before { box-shadow: -4px 0 0 var(--accent); }
+.project.drop-after { box-shadow: 4px 0 0 var(--accent); }

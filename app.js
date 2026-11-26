@@ -1666,8 +1666,9 @@ const VIEWS = {
     <div class="bento">
       ${S.projects.map((p) => {
         const pc = p.tasks.length ? Math.round((p.tasks.filter((t) => t.done).length / p.tasks.length) * 100) : 0;
-        return `<div class="card project c-4">
+        return `<div class="card project c-4" data-pid-card="${p.id}">
           <div class="card-head" style="margin:0">
+            <span class="grip" title="Arrastrá para reordenar" aria-hidden="true">⠿</span>
             <h2>${esc(p.name)}</h2>
             <select data-act="proj-status" data-id="${p.id}" style="width:auto;padding:5px 8px;font-size:12.5px">${["Idea", "Activo", "En pausa", "Terminado"].map((s) => `<option ${s === p.status ? "selected" : ""}>${s}</option>`).join("")}</select>
           </div>
@@ -2331,6 +2332,33 @@ function act(el) {
   }
   commit();
   if (snap) toast(a.startsWith("clear") ? "Lista vaciada" : "Borrado", () => { S = snap; commit(); });
+}
+// Reordenar proyectos arrastrando desde el ⠿
+{
+  let dragId = null;
+  const cardOf = (t) => t.closest?.("[data-pid-card]");
+  document.addEventListener("mousedown", (e) => { if (e.target.closest?.(".grip")) { const c = cardOf(e.target); if (c) c.draggable = true; } });
+  document.addEventListener("mouseup", () => document.querySelectorAll("[data-pid-card][draggable=true]").forEach((c) => (c.draggable = false)));
+  document.addEventListener("dragstart", (e) => { const c = cardOf(e.target); if (!c) return; dragId = c.dataset.pidCard; c.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dragId); });
+  document.addEventListener("dragover", (e) => {
+    const c = cardOf(e.target); if (!dragId || !c) return;
+    e.preventDefault();
+    document.querySelectorAll(".drop-before,.drop-after").forEach((x) => x.classList.remove("drop-before", "drop-after"));
+    if (c.dataset.pidCard === dragId) return;
+    const r = c.getBoundingClientRect(), after = e.clientX > r.left + r.width / 2;
+    c.classList.add(after ? "drop-after" : "drop-before");
+  });
+  document.addEventListener("drop", (e) => {
+    const c = cardOf(e.target); if (!dragId || !c || c.dataset.pidCard === dragId) return;
+    e.preventDefault();
+    const r = c.getBoundingClientRect(), after = e.clientX > r.left + r.width / 2;
+    const from = S.projects.findIndex((p) => p.id === dragId); if (from < 0) return;
+    const [m] = S.projects.splice(from, 1);
+    let to = S.projects.findIndex((p) => p.id === c.dataset.pidCard); if (after) to++;
+    S.projects.splice(to, 0, m);
+    dragId = null; commit();
+  });
+  document.addEventListener("dragend", () => { dragId = null; document.querySelectorAll(".dragging,.drop-before,.drop-after").forEach((x) => x.classList.remove("dragging", "drop-before", "drop-after")); document.querySelectorAll("[data-pid-card][draggable=true]").forEach((c) => (c.draggable = false)); });
 }
 document.addEventListener("click", (e) => {
   const el = e.target.closest("[data-act]");
