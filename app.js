@@ -66,6 +66,7 @@ const ICONS = {
   surf: "M2 8c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 13c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 18c2-2 4-2 6 0s4 2 6 0 4-2 6 0",
   solin: "M23 7l-7 5 7 5zM3 5h13a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z",
   repos: "M9 19c-5 1.5-5-2.5-7-3m14 6v-3.9a3.4 3.4 0 0 0-1-2.6c3.1-.3 6.4-1.5 6.4-7a5.4 5.4 0 0 0-1.5-3.8 5 5 0 0 0-.1-3.7s-1.2-.4-3.9 1.4a13.4 13.4 0 0 0-7 0C6.3 2.5 5.1 2.9 5.1 2.9a5 5 0 0 0-.1 3.7A5.4 5.4 0 0 0 3.5 10.4c0 5.5 3.3 6.7 6.4 7a3.4 3.4 0 0 0-1 2.6V22",
+  stats: "M4 20V11M10 20V4M16 20v-8M22 20H2",
   lectura: "M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2zM22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z",
   media: "M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM21 15l-5-5L5 21",
   pinterest: "M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zM12 11.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z",
@@ -82,7 +83,7 @@ const ICONS = {
   ideas: "M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z",
 };
 const NAV = [
-  { group: null, items: [["inicio", "Inicio"]] },
+  { group: null, items: [["inicio", "Inicio"], ["stats", "Estadísticas"]] },
   { group: "Cuerpo", items: [["rutina", "Gym"], ["judo", "Judo"], ["surf", "Surf"], ["comida", "Comida"], ["fisico", "Cambio físico"]] },
   { group: "Día a día", items: [["calendario", "Calendario"], ["habitos", "Hábitos"], ["compras", "Compras"], ["diario", "Diario"]] },
   { group: "Aprender", items: [["estudio", "Estudio"], ["idiomas", "Idiomas"], ["lectura", "Lectura"]] },
@@ -1104,6 +1105,17 @@ function channelsHTML() {
     <div class="card ch-card">${tabs}${newForm}${body}</div>${notes}
   </section>`;
 }
+/* ---------- Estadísticas: todo sale de lo que ya marcás, no hay que cargar nada ---------- */
+const weeksBack = (n) => Array.from({ length: n }, (_, i) => weekDates(-(n - 1 - i)));   // n semanas (lunes a domingo); la última es esta
+const MES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const stRing = (pct, big, small) => {
+  const r = 40, c = 2 * Math.PI * r, p = Math.max(0, Math.min(100, pct));
+  return `<svg class="ring" viewBox="0 0 100 100" role="img" aria-label="${esc(big)} ${esc(small)}"><circle cx="50" cy="50" r="${r}" class="rg-bg"/><circle cx="50" cy="50" r="${r}" class="rg-fg" stroke-dasharray="${(c * p / 100).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 50 50)"/><text x="50" y="53" text-anchor="middle" class="rg-n">${big}</text><text x="50" y="68" text-anchor="middle" class="rg-s">${small}</text></svg>`;
+};
+const stBars = (items, max) => `<div class="sbars">${items.map((it) => `<div class="sbar ${it.now ? "now" : ""} ${it.v ? "" : "zero"}" title="${esc(it.title || "")}"><span class="sv">${it.v || ""}</span><div class="sb-track"><i style="height:${max ? Math.round((it.v / max) * 100) : 0}%"></i></div><span class="sl">${esc(it.label)}</span></div>`).join("")}</div>`;
+const stHeat = (weeks, level) => { const t = today(); return `<div class="heat">${weeks.flat().map((d) => `<i class="${d > t ? "fut" : "l" + level(d)}" title="${esc(fmtDate(d))}"></i>`).join("")}</div>
+  <div class="heat-leg"><span>menos</span><i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i><span>más</span></div>`; };
+const stHbar = (label, pct, right = "") => `<div class="hbar"><span class="hl">${label}</span><span class="ht"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></span><span class="hv">${right || pct + "%"}</span></div>`;
 const VIEWS = {
   inicio() {
     const d = ROUTINE[new Date().getDay()];
@@ -1644,7 +1656,7 @@ const VIEWS = {
           <button class="del" data-act="del-study" data-id="${s.id}">✕</button></li>`).join("") || `<li class="empty" style="background:none">Sin pendientes de estudio.</li>`}
       </ul>
     </div>
-    <div class="bento">${notesCard("estudio", "Notas", "c-12")}</div>`;
+    <div class="bento" style="margin-top:16px">${notesCard("estudio", "Notas", "c-12")}</div>`;
   },
 
   proyectos() {
@@ -1683,6 +1695,57 @@ const VIEWS = {
         </form>
       </div>
       ${notesCard("proyectos", "Notas", "c-4")}
+    </div>`;
+  },
+
+  stats() {
+    const t = today(), gset = new Set(S.logs.gym.map((l) => l.date));
+    const W12 = weeksBack(12), W18 = weeksBack(18);
+    const nIn = (set, ds) => ds.filter((d) => set.has(d)).length;
+    const g12 = W12.map((ds) => nIn(gset, ds)), gLast4 = g12.slice(-4).reduce((a, b) => a + b, 0), gTotal = nIn(gset, W18.flat()), gBest = Math.max(0, ...g12);
+    const wkLabel = (ds, i, n) => (i === n - 1 ? "hoy" : String(+ds[0].slice(8)));
+    // Hábitos (últimos 30 días)
+    const hs = habitList(), d30 = Array.from({ length: 30 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - i); return iso(d); });
+    const hdone = (h, d) => (h.gym ? gset.has(d) : (S.habits[d] || []).includes(h.key));
+    const hrows = hs.map((h) => {
+      const n = d30.filter((d) => hdone(h, d)).length;
+      let s = 0; const d = new Date(); if (!hdone(h, iso(d))) d.setDate(d.getDate() - 1);
+      while (s < 400 && hdone(h, iso(d))) { s++; d.setDate(d.getDate() - 1); }
+      return { h, n, pct: Math.round((n / 30) * 100), s };
+    });
+    const hAll = hrows.length ? Math.round((hrows.reduce((a, r) => a + r.n, 0) / (hrows.length * 30)) * 100) : 0;
+    const hlevel = (d) => { const k = hs.filter((h) => hdone(h, d)).length, p = hs.length ? k / hs.length : 0; return p === 0 ? 0 : p < 0.34 ? 1 : p < 0.67 ? 2 : p < 1 ? 3 : 4; };
+    // Judo
+    const allW = WAZA_GROUPS.flatMap((g) => g.items), dom = allW.filter((n) => S.waza[n] === 2).length, learn = allW.filter((n) => S.waza[n] === 1).length;
+    // Lectura
+    const yr = t.slice(0, 4), doneB = S.books.filter((b) => b.status === "done" && (b.finished || "").startsWith(yr)), goal = S.readGoal || 12;
+    const pagesYr = doneB.reduce((s, b) => s + (b.pages || 0), 0), rStreak = streakOf(S.readDays), rSet = new Set(S.readDays);
+    const perMonth = MES.map((m, i) => { const v = doneB.filter((b) => +b.finished.slice(5, 7) === i + 1).length; return { v, label: m, now: i === new Date().getMonth(), title: `${m}: ${v} libro${v === 1 ? "" : "s"}` }; });
+    // Estudio y videos
+    const sDone = S.study.filter((s) => s.done).length, sPct = S.study.length ? Math.round((sDone / S.study.length) * 100) : 0;
+    const sNext = S.study.filter((s) => !s.done && s.due).sort((a, b) => a.due.localeCompare(b.due)).slice(0, 3);
+    const vid = SOL_STAGES.map((s, i) => ({ s, n: S.solin.filter((v) => v.stage === i).length })), vMax = Math.max(1, ...vid.map((x) => x.n));
+    const cont = CONTENT_STAGES.map((s, i) => ({ s, n: S.content.filter((c) => c.stage === i).length })), cMax = Math.max(1, ...cont.map((x) => x.n));
+    const card = (cls, title, sub, body) => `<div class="card ${cls}"><div class="card-head"><h2>${title}</h2>${sub ? `<span class="sub">${sub}</span>` : ""}</div>${body}</div>`;
+    return `
+    ${head("Estadísticas", "Tu progreso en gráficos. Sale solo de lo que ya marcás en cada sección.", warnBadge())}
+    <div class="kpis row4" style="margin-bottom:16px">
+      <div class="kpi"><span class="label-sm">Entrenos, últimas 4 semanas</span><div class="v">${gLast4}<small>días</small></div><div class="d">mejor semana: ${gBest} de 7</div></div>
+      <div class="kpi"><span class="label-sm">Hábitos cumplidos</span><div class="v">${hAll}<small>%</small></div><div class="d">promedio de los últimos 30 días</div><div class="bar"><i style="width:${hAll}%"></i></div></div>
+      <div class="kpi"><span class="label-sm">Racha de lectura</span><div class="v">${rStreak}<small>días</small></div><div class="d">${doneB.length} de ${goal} libros este año</div></div>
+      <div class="kpi"><span class="label-sm">Técnicas de judo</span><div class="v">${dom}<small>/ 100</small></div><div class="d">${learn} aprendiendo</div><div class="bar"><i style="width:${dom}%"></i></div></div>
+    </div>
+    <div class="bento">
+      ${card("c-8", "Entrenos por semana", "últimas 12 semanas", stBars(g12.map((v, i) => ({ v, label: wkLabel(W12[i], i, 12), now: i === 11, title: `Semana del ${fmtDate(W12[i][0])}: ${v} de 7 días` })), 7))}
+      ${card("c-4", "Judo", "técnicas del Kodokan", `<div class="ring-row">${stRing(dom, String(dom), "de 100")}<ul class="legend"><li><i class="lg a"></i><b>${dom}</b> dominadas</li><li><i class="lg b"></i><b>${learn}</b> aprendiendo</li><li><i class="lg c"></i><b>${100 - dom - learn}</b> sin empezar</li></ul></div><a class="small" href="#judo">Ver las 100 técnicas →</a>`)}
+      ${card("c-6", "Constancia en el gimnasio", `${gTotal} entrenos en 18 semanas`, stHeat(W18, (d) => (gset.has(d) ? 4 : 0)))}
+      ${card("c-6", "Constancia en hábitos", "cuántos cumplís cada día", stHeat(W18, hlevel))}
+      ${card("c-6", "Hábitos, últimos 30 días", "", hrows.length ? hrows.map((r) => stHbar(esc(r.h.name), r.pct, `${r.pct}%${r.s > 1 ? ` · racha ${r.s}` : ""}`)).join("") : `<p class="empty">Todavía no hay hábitos.</p>`)}
+      ${card("c-6", "Evolución del peso", `<a href="#fisico">Ver detalle</a>`, weightChart())}
+      ${card("c-6", "Idiomas", "días practicados por semana", S.langs.length ? S.langs.map((L) => { const set = new Set(L.days || []); return `<div class="lang-st"><div class="ls-h"><b>${esc(L.name)}</b><span class="muted small">${esc(L.level)} → ${esc(L.goal)} · racha ${streakOf(L.days || [])}</span></div>${stBars(W12.map((ds, i) => ({ v: nIn(set, ds), label: i === 11 ? "hoy" : "", now: i === 11, title: `Semana del ${fmtDate(ds[0])}: ${nIn(set, ds)} de 7 días` })), 7)}</div>`; }).join("") : `<p class="empty">Agregá un idioma para ver su progreso.</p>`)}
+      ${card("c-6", "Lectura", `${yr}`, `<div class="ring-row">${stRing(Math.round((doneB.length / goal) * 100), `${doneB.length}/${goal}`, "libros")}<ul class="legend"><li><b>${pagesYr}</b> páginas leídas</li><li><b>${S.books.filter((b) => b.status === "reading").length}</b> leyendo ahora</li><li><b>${[...rSet].filter((d) => d.startsWith(yr)).length}</b> días de lectura</li></ul></div>${stBars(perMonth, Math.max(1, ...perMonth.map((m) => m.v)))}`)}
+      ${card("c-6", "Estudio", "", S.study.length ? `<div class="ring-row">${stRing(sPct, sPct + "%", "hecho")}<ul class="legend"><li><b>${sDone}</b> terminadas</li><li><b>${S.study.length - sDone}</b> pendientes</li></ul></div>${sNext.length ? `<p class="label-sm" style="margin:14px 0 6px">Lo próximo</p><ul class="list">${sNext.map((s) => `<li><span class="grow"><b style="font-weight:500">${esc(s.subject)}</b> · ${esc(s.text)}</span><span class="small muted mono">${fmtDate(s.due)}</span></li>`).join("")}</ul>` : ""}` : `<p class="empty">Todavía no cargaste pendientes de estudio.</p>`)}
+      ${card("c-6", "Videos y contenido", "de la idea a publicado", `<p class="label-sm" style="margin:0 0 8px">Proyectos de video</p>${vid.map((x) => stHbar(x.s, Math.round((x.n / vMax) * 100), String(x.n))).join("")}<p class="label-sm" style="margin:16px 0 8px">Ideas de contenido</p>${cont.map((x) => stHbar(x.s, Math.round((x.n / cMax) * 100), String(x.n))).join("")}`)}
     </div>`;
   },
 
